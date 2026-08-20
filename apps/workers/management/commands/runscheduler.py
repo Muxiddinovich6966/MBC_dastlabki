@@ -139,24 +139,18 @@ def job_subscription_warning():
     for days in warn_days:
         target_date = today + timedelta(days=days)
         plans = UserPlan.objects.filter(end_date=target_date).select_related('user')
-        print(f"[DEBUG] {days} kun: target={target_date}, topilgan obunalar={plans.count()}")
 
         for plan in plans:
             user = plan.user
-            print(f"[DEBUG2] user={user}, tg_id={user.tg_id}")
             if not user.tg_id:
-                print(f"[DEBUG2] -> tg_id yo'q, o'tkazildi")
                 continue
             has_later = UserPlan.objects.filter(user=user, end_date__gt=plan.end_date).exists()
             if has_later:
-                print(f"[DEBUG2] -> keyinroq obunasi bor, o'tkazildi")
                 continue
             try:
-                ok = send_subscription_warning(user.tg_id, plan.end_date, days)
-                print(f"[DEBUG2] -> yuborildi, natija={ok}")
+                send_subscription_warning(user.tg_id, plan.end_date, days)
                 log.info(f"[Ogohlantirish] {user} - {days} kun qoldi")
             except Exception as e:
-                print(f"[DEBUG2] -> XATO: {e}")
                 log.error(f"[Ogohlantirish xatosi] {user}: {e}")
 
 # ─────────────────────────────────────────────
@@ -262,9 +256,8 @@ def job_upcoming_deadlines():
 def job_event_time_reminders():
     from apps.workers.models import WorkEvent, Task
     from config.bot_notify import send_worker_bot_message
-    from datetime import datetime
 
-    now = datetime.now()
+    now = timezone.localtime()  # Asia/Tashkent (USE_TZ=True) — server OS UTC bo'lsa ham to'g'ri soat
     today = now.date()
     current_hour = now.hour
 
@@ -328,9 +321,9 @@ class Command(BaseCommand):
         scheduler.add_job(job_upcoming_deadlines, IntervalTrigger(minutes=1), id='deadline_reminders')
         scheduler.add_job(job_event_time_reminders, IntervalTrigger(minutes=1), id='event_time_reminders')
 
-        # TEST REJIMI: obuna tekshiruvi har daqiqada (asl reja: CronTrigger(hour=0, minute=0) — kechasi 00:00)
-        scheduler.add_job(job_expired_subscriptions, IntervalTrigger(minutes=2), id='expired_subs')
-        scheduler.add_job(job_subscription_warning, IntervalTrigger(minutes=2), id='sub_warning')
+        # Obuna tekshiruvi — har kuni kechasi 00:00 (ban va ogohlantirish xabarlari kunda 1 marta)
+        scheduler.add_job(job_expired_subscriptions, CronTrigger(hour=0, minute=0), id='expired_subs')
+        scheduler.add_job(job_subscription_warning, CronTrigger(hour=0, minute=0), id='sub_warning')
 
         self.stdout.write(self.style.SUCCESS("Scheduler ishga tushdi. To'xtatish: Ctrl+C"))
         try:
