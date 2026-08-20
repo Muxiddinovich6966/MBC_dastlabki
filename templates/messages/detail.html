@@ -1,0 +1,94 @@
+{% extends 'base.html' %}
+{% block title %}{{ msg.title }}{% endblock %}
+{% block page_title %}{{ msg.title }}{% endblock %}
+{% block page_sub %}{{ msg.created_at|date:"d.m.Y H:i" }} — Xabar detali{% endblock %}
+
+{% block topbar_actions %}
+<a href="{% url 'messages_list' %}" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> Orqaga</a>
+{% endblock %}
+
+{% block content %}
+<div class="stats-grid" style="margin-bottom:24px;">
+    <div class="stat-card">
+        <div class="stat-card-icon blue"><i class="fas fa-users"></i></div>
+        <div class="stat-value">{{ counts.total }}</div>
+        <div class="stat-label">Jami qabul qiluvchi</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-card-icon green"><i class="fas fa-check-circle"></i></div>
+        <div class="stat-value">{{ counts.success }}</div>
+        <div class="stat-label">Muvaffaqiyatli yuborildi</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-card-icon red"><i class="fas fa-times-circle"></i></div>
+        <div class="stat-value">{{ counts.failed }}</div>
+        <div class="stat-label">Xato (yetmadi)</div>
+    </div>
+</div>
+
+<div class="glass-panel" style="margin-bottom:24px;">
+    <h3 style="margin-bottom:16px;"><i class="fas fa-envelope" style="color:var(--accent)"></i> Xabar mazmuni</h3>
+    <div style="margin-bottom:12px;">
+        <span style="color:var(--text-secondary); font-size:12px;">SARLAVHA</span>
+        <div style="font-weight:600; font-size:16px;">{{ msg.title }}</div>
+    </div>
+    <div style="margin-bottom:12px;">
+        <span style="color:var(--text-secondary); font-size:12px;">MATN</span>
+        <div style="white-space:pre-wrap; padding:12px; background:rgba(0,0,0,0.2); border-radius:8px; margin-top:6px;">{{ msg.description }}</div>
+    </div>
+    <div>
+        <span style="color:var(--text-secondary); font-size:12px;">TEGLAR</span>
+        <div style="margin-top:6px;">
+            {% for t in msg.tags %}
+            <span class="badge badge-info">{{ t }}</span>
+            {% endfor %}
+        </div>
+    </div>
+    {% if files %}
+    <div style="margin-top:16px;">
+        <span style="color:var(--text-secondary); font-size:12px;">FAYLLAR ({{ files.count }})</span>
+        <div style="margin-top:6px; display:flex; gap:8px; flex-wrap:wrap;">
+            {% for f in files %}
+            <a href="{{ f.file.url }}" target="_blank" class="btn btn-secondary btn-sm">
+                <i class="fas fa-paperclip"></i> {{ f.file.name|slice:"9:" }}
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<div class="glass-panel">
+    <h3 style="margin-bottom:16px;"><i class="fas fa-list" style="color:var(--accent)"></i> Qabul qiluvchilar</h3>
+    <div class="table-container">
+        <table>
+            <thead><tr><th>Foydalanuvchi</th><th>Telegram ID</th><th>Holati</th><th>Sana</th></tr></thead>
+            <tbody>
+                {% for r in recipients %}
+                <tr>
+                    <td>
+                        <strong>{{ r.user.profile.name|default:r.user.tg_username|default:"—" }} {{ r.user.profile.surname }}</strong>
+                        {% if r.user.tg_username %}
+                        <div style="color:var(--text-secondary); font-size:11px;">@{{ r.user.tg_username }}</div>
+                        {% endif %}
+                    </td>
+                    <td style="color:var(--text-secondary); font-family:monospace; font-size:12px;">{{ r.user.tg_id }}</td>
+                    <td>
+                        {% if r.status == 'success' %}
+                        <span class="badge badge-success">✅ Yuborildi</span>
+                        {% elif r.status == 'failed' %}
+                        <span class="badge badge-danger">❌ Xato</span>
+                        {% else %}
+                        <span class="badge badge-warning">⏳ Kutilmoqda</span>
+                        {% endif %}
+                    </td>
+                    <td style="color:var(--text-secondary); font-size:12px;">{{ r.created_at|date:"d.m.Y H:i" }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="4"><div class="empty-state"><p>Qabul qiluvchi yo'q</p></div></td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

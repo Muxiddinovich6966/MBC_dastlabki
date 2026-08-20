@@ -1,0 +1,183 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Tahrirlash — {{ event.name }}{% endblock %}
+{% block page_title %}Tadbirni tahrirlash{% endblock %}
+{% block page_sub %}{{ event.name }}{% endblock %}
+
+{% block extra_head %}
+<style>
+.group-toggle-list { display:flex; flex-wrap:wrap; gap:8px; margin-top:6px; }
+.group-toggle { cursor:pointer; margin:0; }
+.group-toggle input { position:absolute; opacity:0; width:0; height:0; }
+.group-toggle-chip {
+    display:inline-flex; align-items:center; gap:7px;
+    padding:8px 13px; border-radius:20px; font-size:13px;
+    background:var(--surface-2); color:var(--text-secondary);
+    border:1.5px solid rgba(255,255,255,0.10); transition:all .15s; user-select:none;
+}
+.group-toggle-chip .chip-check { opacity:0; font-size:11px; transition:opacity .15s; }
+.group-toggle:hover .group-toggle-chip { border-color:var(--accent); color:var(--text-primary); }
+.group-toggle input:checked + .group-toggle-chip {
+    background:var(--accent-light); color:var(--accent);
+    border-color:var(--accent); font-weight:600;
+}
+.group-toggle input:checked + .group-toggle-chip .chip-check { opacity:1; }
+</style>
+{% endblock %}
+
+{% block topbar_actions %}
+<a href="{% url 'events_list' %}" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> Orqaga</a>
+{% endblock %}
+
+{% block content %}
+<div class="glass-panel">
+    <form method="post" enctype="multipart/form-data" onsubmit="return confirmEditSave(this)">
+        {% csrf_token %}
+        <div class="form-group">
+            <label class="form-label">Tadbir nomi</label>
+            <input type="text" name="name" class="form-control" value="{{ event.name }}" required>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Mavzu</label>
+            <input type="text" name="theme" class="form-control" value="{{ event.theme }}">
+        </div>
+        <div class="form-grid">
+            <div class="form-group">
+                <label class="form-label">Sana</label>
+                <input type="date" name="date" class="form-control" value="{{ event.date }}" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Vaqt</label>
+                <input type="time" name="time" class="form-control" value="{{ event.time }}" required>
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Joy (Venue) <span style="color:var(--danger)">*</span></label>
+            <select name="venue_id" id="editVenueSelect" class="form-control" required onchange="fillEditVenue(this)">
+                <option value="">— Joy tanlang —</option>
+                {% for v in venues %}
+                <option value="{{ v.id }}"
+                        data-name="{{ v.name }}"
+                        data-address="{{ v.address }}"
+                        data-lat="{{ v.latitude }}"
+                        data-lng="{{ v.longitude }}"
+                        {% if event.venue_id == v.id %}selected{% endif %}>
+                    {{ v.name }}{% if v.address %} — {{ v.address }}{% endif %}
+                </option>
+                {% endfor %}
+            </select>
+            {% if not venues %}
+            <small style="color:var(--warning); font-size:12px;">
+                <i class="fas fa-exclamation-triangle"></i>
+                Hali joy qo'shilmagan. <a href="{% url 'venues_list' %}">Manzillar sahifasiga o'ting</a>.
+            </small>
+            {% endif %}
+        </div>
+        <div id="editVenueInfo" style="background:var(--surface-2); border-radius:8px; padding:10px 14px; margin-bottom:12px; font-size:13px; color:var(--text-secondary);">
+            <i class="fas fa-map-marker-alt" style="color:var(--accent);"></i>
+            <span id="editVenueAddress">{{ event.location }}</span>
+            <span id="editVenueCoords" style="margin-left:10px; opacity:0.7;">
+                {% if event.latitude and event.longitude %}{{ event.latitude }}, {{ event.longitude }}{% endif %}
+            </span>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Speaker</label>
+            <input type="text" name="speaker" class="form-control" value="{{ event.speaker }}">
+        </div>
+        <div class="form-group">
+            <label class="form-label">Tavsif</label>
+            <textarea name="description" class="form-control" required>{{ event.description }}</textarea>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Kategoriya</label>
+            <select name="category" class="form-control">
+                <option value="conference" {% if event.category == 'conference' %}selected{% endif %}>Konferensiya</option>
+                <option value="workshop" {% if event.category == 'workshop' %}selected{% endif %}>Workshop</option>
+                <option value="networking" {% if event.category == 'networking' %}selected{% endif %}>Networking</option>
+                <option value="other" {% if event.category == 'other' %}selected{% endif %}>Boshqa</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Rasm</label>
+            {% if event.image %}
+            <div style="margin-bottom:10px;">
+                <img src="{{ event.image.url }}" style="max-width:200px; border-radius:8px;">
+            </div>
+            {% endif %}
+            <input type="file" name="image" class="form-control" accept="image/*">
+        </div>
+        <div class="form-group">
+            <label class="form-label">Yuboriladigan guruhlar
+                <small style="color:var(--text-secondary); font-weight:400;">— tanlash uchun bosing</small>
+            </label>
+            {% if groups %}
+            <div class="group-toggle-list">
+                {% for g in groups %}
+                <label class="group-toggle">
+                    <input type="checkbox" name="send_groups" value="{{ g.id }}" {% if g.id in selected_group_ids %}checked{% endif %}>
+                    <span class="group-toggle-chip">
+                        <i class="fas fa-users chip-ico"></i>
+                        <span class="chip-title">{{ g.title }}</span>
+                        <i class="fas fa-check chip-check"></i>
+                    </span>
+                </label>
+                {% endfor %}
+            </div>
+            {% else %}
+            <small style="color:var(--warning); font-size:12px;">
+                <i class="fas fa-exclamation-triangle"></i> Hali guruh qo'shilmagan.
+            </small>
+            {% endif %}
+        </div>
+        <div class="form-group">
+            <label class="form-label" style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                <input type="checkbox" name="send_to_all_users" {% if event.send_to_all_users %}checked{% endif %} style="width:16px; height:16px;">
+                Hamma ro'yxatdan o'tgan foydalanuvchiga yuborilsin
+            </label>
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
+            <a href="{% url 'events_list' %}" class="btn btn-secondary">Bekor qilish</a>
+            <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Saqlash</button>
+        </div>
+    </form>
+</div>
+
+{% if has_delivery %}
+{% include 'events/_delivery.html' %}
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+function confirmEditSave(form) {
+    var boxes = form.querySelectorAll('input[name="send_groups"]:checked');
+    if (boxes.length === 0) {
+        alert("Iltimos, qaysi guruh yoki kanalga ketishini belgilang.");
+        return false;
+    }
+    var names = [];
+    boxes.forEach(function (b) {
+        var t = b.parentElement.querySelector('.chip-title');
+        names.push("  • " + (t ? t.textContent.trim() : b.value));
+    });
+    var usersBox = form.querySelector('input[name="send_to_all_users"]');
+    var usersYes = usersBox && usersBox.checked;
+
+    var msg = "O'zgarish quyidagilarga yuboriladi:\n\n"
+        + "📢 Guruh / kanal:\n" + names.join("\n") + "\n\n"
+        + "👥 Foydalanuvchilarga: " + (usersYes ? "HA" : "YO'Q") + "\n\n"
+        + "Eski xabar o'chirilib, yangisi yuboriladi.\nDavom etilsinmi?";
+    return confirm(msg);
+}
+
+function fillEditVenue(sel) {
+    var opt = sel.options[sel.selectedIndex];
+    var address = opt.getAttribute('data-address') || '';
+    var lat = opt.getAttribute('data-lat') || '';
+    var lng = opt.getAttribute('data-lng') || '';
+    var name = opt.getAttribute('data-name') || '';
+    document.getElementById('editVenueAddress').textContent = address || name;
+    document.getElementById('editVenueCoords').textContent = (lat && lng) ? lat + ', ' + lng : '';
+}
+</script>
+{% endblock %}

@@ -1,0 +1,521 @@
+{% extends 'base.html' %}
+{% block title %}Kalendar{% endblock %}
+{% block page_title %}Kalendar{% endblock %}
+{% block page_sub %}Barcha tadbirlar bitta joyda{% endblock %}
+
+{% block extra_head %}
+<style>
+    .mf-wrap { display: grid; grid-template-columns: 1fr; gap: 22px; }
+    /* Ikki ustun faqat yetarli joy bo'lganda — aks holda ro'yxat kalendar tagida to'liq kenglikda */
+    @media (min-width: 1200px) {
+        .mf-wrap { grid-template-columns: 380px minmax(420px, 1fr); align-items: start; }
+        .mf-wrap.year-mode { grid-template-columns: 1fr; }
+    }
+
+    /* ===== Kalendar kartasi (sayt rangida) ===== */
+    .mf-cal {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 24px;
+        padding: 28px 26px 24px;
+        box-shadow: 0 20px 50px rgba(0,0,0,0.32);
+    }
+
+    .mf-eyebrow { font-size: 10.5px; font-weight: 700; letter-spacing: 2.2px; color: var(--text-muted); margin-bottom: 5px; text-transform: uppercase; }
+    .mf-eyebrow b { color: var(--text-primary); font-weight: 800; }
+
+    .mf-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+    .mf-month {
+        font-size: 38px; font-weight: 900; letter-spacing: -1.4px;
+        line-height: 1; text-transform: uppercase;
+        background: linear-gradient(135deg, var(--text-primary) 55%, var(--accent));
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    }
+
+    .mf-side { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
+    .mf-year {
+        font-size: 12.5px; font-weight: 800; color: #fff;
+        padding: 6px 17px; border-radius: 100px;
+        background: linear-gradient(135deg, var(--accent), #8b5cf6);
+        box-shadow: 0 6px 18px rgba(99,102,241,0.42);
+    }
+    .mf-nav { display: flex; gap: 7px; }
+    .mf-nav button {
+        width: 32px; height: 32px; border-radius: 50%;
+        border: 1px solid var(--border);
+        background: rgba(255,255,255,0.04);
+        color: var(--text-secondary);
+        cursor: pointer; font-size: 11px;
+        display: flex; align-items: center; justify-content: center;
+        transition: all .15s ease;
+    }
+    .mf-nav button:hover { background: var(--accent-light); color: var(--accent); border-color: var(--border-hover); }
+
+    .mf-legend { display: flex; gap: 14px; margin-top: 16px; }
+    .mf-legend span { display: inline-flex; align-items: center; gap: 6px; font-size: 10.5px; font-weight: 600; color: var(--text-secondary); }
+    .mf-legend i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+
+    .mf-dow { display: grid; grid-template-columns: repeat(7, 1fr); margin-top: 16px; margin-bottom: 6px; }
+    .mf-dow span { text-align: center; font-size: 10.5px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.4px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+
+    .mf-grid { display: grid; grid-template-columns: repeat(7, 1fr); row-gap: 8px; margin-top: 8px; }
+    .mf-day { min-height: 46px; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+    .mf-day .n {
+        font-size: 13.5px; font-weight: 600; color: var(--text-primary);
+        min-width: 30px; height: 28px; padding: 0 4px;
+        display: flex; align-items: center; justify-content: center;
+        border-radius: 100px;
+    }
+    .mf-day.other .n { color: var(--text-muted); opacity: 0.4; }
+    .mf-day.has-event { cursor: pointer; border-radius: 12px; transition: background .15s ease; }
+    .mf-day.has-event:hover { background: rgba(255,255,255,0.04); }
+    .mf-day.has-event:hover .mf-label { color: var(--text-secondary); }
+    .mf-day.has-event .n { color: #fff; font-weight: 800; box-shadow: 0 4px 14px rgba(0,0,0,0.4); }
+    .mf-day.type-client .n { background: linear-gradient(135deg, #ef4444, #b91c1c); }
+    .mf-day.type-worker .n { background: linear-gradient(135deg, #f59e0b, #b45309); }
+    .mf-day.type-mixed .n { background: linear-gradient(90deg, #ef4444 50%, #f59e0b 50%); }
+    .mf-day.is-today:not(.has-event) .n { box-shadow: inset 0 0 0 1.5px var(--accent); color: var(--accent); }
+    .mf-day.is-today.has-event .n { box-shadow: 0 0 0 2px var(--bg-card), 0 0 0 3.5px var(--accent); }
+
+    /* Tadbir yo'q kunlar — bosilsa ohista bildiriladi */
+    .mf-day.no-event { cursor: pointer; border-radius: 12px; transition: background .15s ease; }
+    .mf-day.no-event:hover .n { background: rgba(255,255,255,0.06); }
+    .mf-day.no-event:active .n { transform: scale(0.92); }
+    .mf-day.no-event .n { transition: background .15s ease, transform .12s ease; }
+    .mf-day.day-picked:not(.is-today) .n { box-shadow: inset 0 0 0 1.5px var(--text-muted); color: var(--text-primary); }
+    .mf-day.day-picked.is-today .n { box-shadow: inset 0 0 0 1.5px var(--accent); }
+    .mf-label {
+        font-size: 7.5px; font-weight: 600; color: var(--text-muted);
+        max-width: 48px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center;
+    }
+
+    /* ===== O'ng tomon: tadbir kartochkalari ===== */
+    .mf-agenda-title { font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 12px; }
+    .mf-agenda {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 14px; align-content: start;
+        max-height: 620px; overflow-y: auto; padding-right: 4px;
+    }
+    /* Ikki ustunli ko'rinishda (kalendar yonida) ro'yxat bitta ustun bo'lib qolsin */
+    @media (min-width: 1200px) {
+        .mf-agenda { grid-template-columns: 1fr; }
+    }
+
+    .mf-card {
+        display: flex; align-items: stretch;
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        overflow: hidden;
+        text-decoration: none;
+        transition: all .16s ease;
+    }
+    .mf-card:hover { transform: translateY(-2px); border-color: var(--border-hover); box-shadow: 0 10px 26px rgba(0,0,0,0.32); }
+    .mf-card.is-past { opacity: 0.45; }
+
+    .mf-card .spine { width: 4px; flex-shrink: 0; }
+    .mf-card .spine.client { background: linear-gradient(180deg, #ef4444, #b91c1c); }
+    .mf-card .spine.worker { background: linear-gradient(180deg, #f59e0b, #b45309); }
+
+    .mf-card-body { display: flex; align-items: flex-start; gap: 16px; padding: 16px 18px; flex: 1; min-width: 0; }
+
+    .mf-date {
+        flex-shrink: 0; width: 50px; text-align: center;
+        padding-top: 2px; border-right: 1px solid var(--border); padding-right: 12px;
+    }
+    .mf-date .d { font-size: 26px; font-weight: 900; line-height: 1; }
+    .mf-date .m { font-size: 9px; font-weight: 800; letter-spacing: 0.6px; text-transform: uppercase; margin-top: 3px; }
+    .mf-date .w { font-size: 8.5px; font-weight: 700; letter-spacing: 0.4px; text-transform: uppercase; opacity: 0.7; margin-top: 1px; }
+    .mf-date.client .d, .mf-date.client .m, .mf-date.client .w { color: #f87171; }
+    .mf-date.worker .d, .mf-date.worker .m, .mf-date.worker .w { color: #fbbf24; }
+
+    .mf-info { min-width: 0; flex: 1; }
+    .mf-time { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; color: var(--text-muted); margin-bottom: 4px; }
+    .mf-name {
+        font-size: 14.5px; font-weight: 700; color: var(--text-primary);
+        margin-bottom: 6px; line-height: 1.3;
+        display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+        overflow: hidden; overflow-wrap: break-word;
+    }
+    .mf-meta { display: flex; align-items: center; gap: 7px; font-size: 11.5px; color: var(--text-secondary); margin-top: 3px; min-width: 0; }
+    .mf-meta i { width: 13px; flex-shrink: 0; text-align: center; font-size: 10.5px; opacity: 0.55; }
+    .mf-meta span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+
+    .mf-empty { text-align: center; padding: 40px 16px; color: var(--text-secondary); background: rgba(255,255,255,0.02); border-radius: 16px; border: 1px dashed var(--border); }
+    .mf-empty i { font-size: 26px; opacity: 0.25; display: block; margin-bottom: 8px; }
+
+    /* Kalendardan tanlangan kun kartochkasi — yorug' va ajralib turadi
+       (o'tib ketgan tadbir bo'lsa ham xira emas, to'liq yorug' bo'ladi) */
+    .mf-card.mf-selected {
+        opacity: 1;
+        border-color: var(--accent);
+        box-shadow: 0 0 0 2px rgba(99,102,241,0.4), 0 12px 30px rgba(0,0,0,0.34);
+        animation: mfPop 0.45s ease;
+    }
+    @keyframes mfPop {
+        0%   { box-shadow: 0 0 0 0 rgba(99,102,241,0.55); }
+        100% { box-shadow: 0 0 0 2px rgba(99,102,241,0.4), 0 12px 30px rgba(0,0,0,0.34); }
+    }
+
+    /* ===== Toast bildirishnoma (tadbir yo'q kun) ===== */
+    .mf-toast-wrap {
+        position: fixed; left: 50%; bottom: 32px; transform: translateX(-50%);
+        z-index: 1200; display: flex; flex-direction: column; gap: 10px;
+        align-items: center; pointer-events: none;
+    }
+    .mf-toast {
+        display: flex; align-items: center; gap: 13px;
+        background: var(--bg-card); border: 1px solid var(--border);
+        border-radius: 15px; padding: 12px 20px 12px 14px;
+        box-shadow: 0 18px 44px rgba(0,0,0,0.5);
+        opacity: 0; transform: translateY(16px) scale(0.96);
+        transition: opacity .3s cubic-bezier(.2,.8,.2,1), transform .3s cubic-bezier(.2,.8,.2,1);
+    }
+    .mf-toast.show { opacity: 1; transform: translateY(0) scale(1); }
+    .mf-toast .ic {
+        width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
+        display: flex; align-items: center; justify-content: center;
+        background: rgba(255,255,255,0.05); color: var(--text-muted); font-size: 14px;
+    }
+    .mf-toast .tx { line-height: 1.35; }
+    .mf-toast .tx small {
+        display: block; font-size: 10px; font-weight: 700; color: var(--text-muted);
+        letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 2px;
+    }
+    .mf-toast .tx b { font-size: 13.5px; font-weight: 700; color: var(--text-primary); }
+
+    /* ===== Oy / Yil toggle ===== */
+    .mf-controls { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; flex-wrap: wrap; }
+    .mf-controls .mf-legend { margin-top: 0; }
+    .mf-toggle { display: inline-flex; background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 100px; padding: 3px; }
+    .mf-toggle button {
+        border: none; background: none; color: var(--text-secondary);
+        font-size: 12px; font-weight: 700; padding: 6px 18px; border-radius: 100px;
+        cursor: pointer; transition: all .15s ease;
+    }
+    .mf-toggle button.active { background: var(--accent); color: #fff; box-shadow: 0 4px 12px rgba(99,102,241,0.4); }
+
+    /* ===== Yil ko'rinishi (12 mini-oy) ===== */
+    .mf-year-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; margin-top: 16px; }
+    .mf-mini {
+        background: rgba(255,255,255,0.02); border: 1px solid var(--border);
+        border-radius: 14px; padding: 12px 11px 13px; cursor: pointer; transition: all .15s ease;
+    }
+    .mf-mini:hover { border-color: var(--border-hover); background: rgba(255,255,255,0.045); transform: translateY(-2px); }
+    .mf-mini-title { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; color: var(--text-primary); }
+    .mf-mini.is-current { border-color: var(--accent); }
+    .mf-mini.is-current .mf-mini-title { color: var(--accent); }
+    .mf-mini-dow { display: grid; grid-template-columns: repeat(7, 1fr); margin-bottom: 4px; }
+    .mf-mini-dow span { text-align: center; font-size: 8px; font-weight: 700; color: var(--text-muted); }
+    .mf-mini-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+    .mf-mini-grid .d {
+        aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
+        font-size: 9.5px; color: var(--text-secondary); border-radius: 50%;
+    }
+    .mf-mini-grid .d.other { visibility: hidden; }
+    .mf-mini-grid .d.today { box-shadow: inset 0 0 0 1px var(--accent); color: var(--accent); font-weight: 700; }
+    .mf-mini-grid .d.ev { color: #fff; font-weight: 800; }
+    .mf-mini-grid .d.ev.type-client { background: linear-gradient(135deg, #ef4444, #b91c1c); }
+    .mf-mini-grid .d.ev.type-worker { background: linear-gradient(135deg, #f59e0b, #b45309); }
+    .mf-mini-grid .d.ev.type-mixed { background: linear-gradient(90deg, #ef4444 50%, #f59e0b 50%); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="animate-fade-in">
+<div class="mf-wrap">
+
+    <div class="mf-cal">
+        <div class="mf-top">
+            <div>
+                <div class="mf-eyebrow">MFaktor <b>Biznes Klub</b></div>
+                <div class="mf-month" id="mfMonthTitle">—</div>
+            </div>
+            <div class="mf-side">
+                <div class="mf-year" id="mfYearBadge">—</div>
+                <div class="mf-nav">
+                    <button id="mfPrev"><i class="fas fa-chevron-left"></i></button>
+                    <button id="mfNext"><i class="fas fa-chevron-right"></i></button>
+                </div>
+            </div>
+        </div>
+
+        <div class="mf-controls">
+            <div class="mf-toggle">
+                <button type="button" id="mfModeMonth" class="active">Oy</button>
+                <button type="button" id="mfModeYear">Yil</button>
+            </div>
+            <div class="mf-legend">
+                <span><i style="background:#ef4444;"></i> Mijozlar</span>
+                <span><i style="background:#f59e0b;"></i> Ishchilar</span>
+            </div>
+        </div>
+
+        <!-- Oy ko'rinishi -->
+        <div id="mfMonthView">
+            <div class="mf-dow">
+                <span>Dush</span><span>Sesh</span><span>Chor</span><span>Pay</span><span>Juma</span><span>Shan</span><span>Yak</span>
+            </div>
+            <div class="mf-grid" id="mfDayGrid"></div>
+        </div>
+
+        <!-- Yil ko'rinishi (12 oy) -->
+        <div class="mf-year-grid" id="mfYearGrid" style="display:none;"></div>
+    </div>
+
+    <div>
+        <div class="mf-agenda-title" id="mfAgendaTitle">Shu oydagi tadbirlar</div>
+        <div class="mf-agenda" id="mfAgendaList"></div>
+    </div>
+
+</div>
+</div>
+
+{{ events_data|json_script:"calendar-events" }}
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var events = JSON.parse(document.getElementById('calendar-events').textContent);
+    var todayStr = "{{ today_str }}";
+    var MONTHS = ['Yanvar','Fevral','Mart','Aprel','May','Iyun','Iyul','Avgust','Sentabr','Oktabr','Noyabr','Dekabr'];
+    var DOW_SHORT = ['YAK','DUSH','SESH','CHOR','PAY','JUM','SHAN'];
+
+    var byDate = {};
+    events.forEach(function (ev) {
+        if (!byDate[ev.date]) byDate[ev.date] = [];
+        byDate[ev.date].push(ev);
+    });
+
+    var todayParts = todayStr.split('-').map(Number);
+    var view = { year: todayParts[0], month: todayParts[1] - 1, mode: 'month' };
+
+    function pad(n) { return n < 10 ? '0' + n : '' + n; }
+
+    function dayTypeClass(dayEvents) {
+        var hasClient = dayEvents.some(function (e) { return e.type !== 'worker'; });
+        var hasWorker = dayEvents.some(function (e) { return e.type === 'worker'; });
+        if (hasClient && hasWorker) return 'type-mixed';
+        if (hasWorker) return 'type-worker';
+        return 'type-client';
+    }
+
+    function renderMonth() {
+        document.getElementById('mfMonthTitle').textContent = MONTHS[view.month];
+        document.getElementById('mfYearBadge').textContent = view.year;
+
+        var grid = document.getElementById('mfDayGrid');
+        grid.innerHTML = '';
+
+        var firstOfMonth = new Date(view.year, view.month, 1);
+        var startOffset = (firstOfMonth.getDay() + 6) % 7;
+        var daysInMonth = new Date(view.year, view.month + 1, 0).getDate();
+        var prevMonthDays = new Date(view.year, view.month, 0).getDate();
+
+        var cells = [];
+        for (var i = startOffset; i > 0; i--) cells.push({ day: prevMonthDays - i + 1, other: true });
+        for (var d = 1; d <= daysInMonth; d++) cells.push({ day: d, other: false });
+        var nextDay = 1;
+        while (cells.length % 7 !== 0) cells.push({ day: nextDay++, other: true });
+
+        cells.forEach(function (c) {
+            var cell = document.createElement('div');
+            if (c.other) {
+                cell.className = 'mf-day other';
+                cell.innerHTML = '<span class="n">' + c.day + '</span>';
+                grid.appendChild(cell);
+                return;
+            }
+            var dateStr = view.year + '-' + pad(view.month + 1) + '-' + pad(c.day);
+            var dayEvents = byDate[dateStr] || [];
+            var hasEvents = dayEvents.length > 0;
+            var isToday = dateStr === todayStr;
+
+            cell.className = 'mf-day' + (hasEvents ? ' has-event ' + dayTypeClass(dayEvents) : ' no-event') + (isToday ? ' is-today' : '');
+            cell.dataset.date = dateStr;
+            var label = '';
+            if (hasEvents) {
+                label = dayEvents.length > 1 ? (dayEvents[0].name + ' +' + (dayEvents.length - 1)) : dayEvents[0].name;
+                cell.title = dayEvents.map(function (e) { return e.name; }).join(', ');
+            }
+            cell.innerHTML = '<span class="n">' + c.day + '</span>' + (hasEvents ? '<span class="mf-label">' + label + '</span>' : '');
+            grid.appendChild(cell);
+        });
+    }
+
+    function renderAgenda() {
+        var list = document.getElementById('mfAgendaList');
+        var titleEl = document.getElementById('mfAgendaTitle');
+        var isYear = view.mode === 'year';
+        var prefix = isYear ? (view.year + '-') : (view.year + '-' + pad(view.month + 1));
+        var monthEvents = events.filter(function (ev) { return ev.date.indexOf(prefix) === 0; })
+                                 .sort(function (a, b) { return a.date.localeCompare(b.date); });
+
+        if (isYear) {
+            titleEl.textContent = view.year + " yildagi barcha tadbirlar";
+        } else {
+            var isCurrentMonth = (view.year === todayParts[0] && view.month === todayParts[1] - 1);
+            titleEl.textContent = isCurrentMonth ? "Shu oydagi tadbirlar" : (MONTHS[view.month] + " oyidagi tadbirlar");
+        }
+
+        if (!monthEvents.length) {
+            list.innerHTML = '<div class="mf-empty"><i class="fas fa-calendar-day"></i><p>' + (isYear ? 'Bu yilda tadbir yo\'q' : 'Bu oyda tadbir yo\'q') + '</p></div>';
+            return;
+        }
+
+        var html = '';
+        monthEvents.forEach(function (ev) {
+            var parts = ev.date.split('-').map(Number);
+            var dt = new Date(parts[0], parts[1] - 1, parts[2]);
+            var typeClass = ev.type === 'worker' ? 'worker' : 'client';
+            var isPast = ev.date < todayStr;
+
+            html += '<a class="mf-card' + (isPast ? ' is-past' : '') + '" data-date="' + ev.date + '" href="' + ev.url + '">';
+            html += '  <div class="spine ' + typeClass + '"></div>';
+            html += '  <div class="mf-card-body">';
+            html += '    <div class="mf-date ' + typeClass + '">';
+            html += '      <div class="d">' + parts[2] + '</div>';
+            html += '      <div class="m">' + MONTHS[parts[1] - 1] + '</div>';
+            html += '      <div class="w">' + DOW_SHORT[dt.getDay()] + '</div>';
+            html += '    </div>';
+            html += '    <div class="mf-info">';
+            if (ev.time) html += '<div class="mf-time"><i class="far fa-clock"></i> ' + ev.time.slice(0,5) + '</div>';
+            html += '      <div class="mf-name">' + ev.name + '</div>';
+            if (ev.speaker) html += '<div class="mf-meta"><i class="fas fa-microphone"></i> <span>' + ev.speaker + '</span></div>';
+            if (ev.location) html += '<div class="mf-meta"><i class="fas fa-map-marker-alt"></i> <span>' + ev.location + '</span></div>';
+            html += '    </div>';
+            html += '  </div>';
+            html += '</a>';
+        });
+        list.innerHTML = html;
+    }
+
+    function renderAll() {
+        if (view.mode === 'year') { renderYear(); }
+        else { renderMonth(); }
+        renderAgenda();
+    }
+
+    function renderYear() {
+        document.getElementById('mfMonthTitle').textContent = view.year;
+        document.getElementById('mfYearBadge').textContent = 'YIL';
+
+        var grid = document.getElementById('mfYearGrid');
+        grid.innerHTML = '';
+
+        for (var m = 0; m < 12; m++) {
+            var mini = document.createElement('div');
+            var isCur = (view.year === todayParts[0] && m === todayParts[1] - 1);
+            mini.className = 'mf-mini' + (isCur ? ' is-current' : '');
+            mini.dataset.month = m;
+
+            var firstDay = new Date(view.year, m, 1);
+            var startOffset = (firstDay.getDay() + 6) % 7;
+            var daysInMonth = new Date(view.year, m + 1, 0).getDate();
+
+            var html = '<div class="mf-mini-title">' + MONTHS[m] + '</div>';
+            html += '<div class="mf-mini-dow"><span>D</span><span>S</span><span>C</span><span>P</span><span>J</span><span>S</span><span>Y</span></div>';
+            html += '<div class="mf-mini-grid">';
+            for (var i = 0; i < startOffset; i++) html += '<span class="d other"></span>';
+            for (var d = 1; d <= daysInMonth; d++) {
+                var ds = view.year + '-' + pad(m + 1) + '-' + pad(d);
+                var evs = byDate[ds] || [];
+                var cls = 'd';
+                if (evs.length) cls += ' ev ' + dayTypeClass(evs);
+                if (ds === todayStr) cls += ' today';
+                html += '<span class="' + cls + '">' + d + '</span>';
+            }
+            html += '</div>';
+            mini.innerHTML = html;
+            grid.appendChild(mini);
+        }
+    }
+
+    function setMode(mode) {
+        view.mode = mode;
+        var isYear = mode === 'year';
+        document.getElementById('mfMonthView').style.display = isYear ? 'none' : '';
+        document.getElementById('mfYearGrid').style.display = isYear ? 'grid' : 'none';
+        document.getElementById('mfModeMonth').classList.toggle('active', !isYear);
+        document.getElementById('mfModeYear').classList.toggle('active', isYear);
+        document.querySelector('.mf-wrap').classList.toggle('year-mode', isYear);
+        renderAll();
+    }
+
+    // Toast bildirishnoma uchun konteyner
+    var toastWrap = document.createElement('div');
+    toastWrap.className = 'mf-toast-wrap';
+    document.body.appendChild(toastWrap);
+    var toastTimer = null;
+    var DOW_FULL = ['Yakshanba','Dushanba','Seshanba','Chorshanba','Payshanba','Juma','Shanba'];
+
+    function showNoEventToast(dateStr) {
+        var p = dateStr.split('-').map(Number);
+        var dt = new Date(p[0], p[1] - 1, p[2]);
+        toastWrap.innerHTML = '';
+        var t = document.createElement('div');
+        t.className = 'mf-toast';
+        t.innerHTML =
+            '<div class="ic"><i class="far fa-calendar"></i></div>' +
+            '<div class="tx"><small>' + p[2] + '-' + MONTHS[p[1] - 1] + ', ' + DOW_FULL[dt.getDay()] + '</small>' +
+            '<b>Bu kunda tadbir yo\'q</b></div>';
+        toastWrap.appendChild(t);
+        requestAnimationFrame(function () { t.classList.add('show'); });
+        if (toastTimer) clearTimeout(toastTimer);
+        toastTimer = setTimeout(function () {
+            t.classList.remove('show');
+            setTimeout(function () { if (t.parentNode) t.parentNode.removeChild(t); }, 320);
+        }, 2600);
+    }
+
+    // Kalendardagi kunga bosilganda:
+    //  - tadbirli kun bo'lsa: o'ng tarafdagi ro'yxatda ajratib ko'rsatamiz
+    //  - tadbir yo'q kun bo'lsa: kunni belgilaymiz va "tadbir yo'q" bildirishnomasini chiqaramiz
+    document.getElementById('mfDayGrid').addEventListener('click', function (e) {
+        var cell = e.target.closest('.mf-day');
+        if (!cell || cell.classList.contains('other') || !cell.dataset.date) return;
+
+        // Avvalgi tanlovlarni tozalaymiz
+        document.querySelectorAll('.mf-card.mf-selected').forEach(function (el) { el.classList.remove('mf-selected'); });
+        document.querySelectorAll('.mf-day.day-picked').forEach(function (el) { el.classList.remove('day-picked'); });
+
+        if (cell.classList.contains('has-event')) {
+            var cards = document.querySelectorAll('.mf-card[data-date="' + cell.dataset.date + '"]');
+            if (!cards.length) return;
+            cards.forEach(function (c) { c.classList.add('mf-selected'); });
+            cards[0].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        } else {
+            cell.classList.add('day-picked');
+            showNoEventToast(cell.dataset.date);
+        }
+    });
+
+    document.getElementById('mfPrev').addEventListener('click', function () {
+        if (view.mode === 'year') { view.year--; }
+        else { view.month--; if (view.month < 0) { view.month = 11; view.year--; } }
+        renderAll();
+    });
+    document.getElementById('mfNext').addEventListener('click', function () {
+        if (view.mode === 'year') { view.year++; }
+        else { view.month++; if (view.month > 11) { view.month = 0; view.year++; } }
+        renderAll();
+    });
+
+    // Rejim almashtirish: Oy / Yil
+    document.getElementById('mfModeMonth').addEventListener('click', function () { setMode('month'); });
+    document.getElementById('mfModeYear').addEventListener('click', function () { setMode('year'); });
+
+    // Yil ko'rinishida oy ustiga bosilganda — o'sha oyning to'liq ko'rinishiga o'tamiz
+    document.getElementById('mfYearGrid').addEventListener('click', function (e) {
+        var mini = e.target.closest('.mf-mini');
+        if (!mini) return;
+        view.month = parseInt(mini.dataset.month, 10);
+        setMode('month');
+    });
+
+    renderAll();
+});
+</script>
+{% endblock %}

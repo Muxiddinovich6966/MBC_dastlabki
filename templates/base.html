@@ -1,0 +1,148 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Boshqaruv paneli{% endblock %} | MBC Platform</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'css/style.css' %}?v=20260807c">
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+
+    <aside class="sidebar" id="sidebar">
+        <div class="brand">
+            <img src="{% static 'images/mfaktor.png' %}" alt="MBC Platform" style="height:36px; width:auto; object-fit:contain;">
+        </div>
+
+        <ul class="nav-links">
+            <li>
+                <a href="{% url 'dashboard' %}" class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">
+                    <i class="fas fa-chart-pie"></i> Dashboard
+                </a>
+            </li>
+            <li>
+                <a href="{% url 'users_list' %}" class="nav-link {% if 'user' in request.resolver_match.url_name %}active{% endif %}">
+                    <i class="fas fa-users"></i> Foydalanuvchilar
+                </a>
+            </li>
+            <li>
+                <a href="{% url 'groups_list' %}" class="nav-link {% if 'group' in request.resolver_match.url_name %}active{% endif %}">
+                    <i class="fas fa-layer-group"></i> Guruhlar
+                </a>
+            </li>
+            <li>
+                <a href="{% url 'events_list' %}" class="nav-link {% if request.resolver_match.url_name == 'events_list' or request.resolver_match.url_name == 'event_detail' %}active{% endif %}">
+                    <i class="fas fa-calendar-alt"></i> Tadbirlar
+                </a>
+            </li>
+            <li>
+                <a href="{% url 'calendar' %}" class="nav-link {% if request.resolver_match.url_name == 'calendar' %}active{% endif %}">
+                    <i class="fas fa-calendar-day"></i> Kalendar
+                </a>
+            </li>
+            <li>
+                <a href="{% url 'leads_list' %}" class="nav-link {% if 'lead' in request.resolver_match.url_name %}active{% endif %}">
+                    <i class="fas fa-user-plus"></i> Ledlar
+                </a>
+            </li>
+            <li>
+                <a href="{% url 'venues_list' %}" class="nav-link {% if 'venue' in request.resolver_match.url_name %}active{% endif %}">
+                    <i class="fas fa-map-marker-alt"></i> Manzillar
+                </a>
+            </li>
+            <li>
+                <a href="{% url 'messages_list' %}" class="nav-link {% if 'message' in request.resolver_match.url_name %}active{% endif %}">
+                    <i class="fas fa-paper-plane"></i> Xabarlar
+                </a>
+            </li>
+            <li>
+               <a href="{% url 'workers_list' %}" class="nav-link {% if 'worker' in request.resolver_match.url_name %}active{% endif %}">
+                   <i class="fas fa-user-tie"></i> Ishchilar
+                </a>
+            </li>
+        </ul>
+
+        <div class="sidebar-footer">
+            <form action="{% url 'logout' %}" method="post">
+                {% csrf_token %}
+                <button type="submit" class="nav-link" style="background:none; border:none; width:100%; cursor:pointer; color:#f87171;">
+                    <i class="fas fa-sign-out-alt"></i> Chiqish
+                </button>
+            </form>
+        </div>
+    </aside>
+
+    <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="closeSidebar()"></div>
+
+    <main class="main-content">
+        <button class="mobile-menu-btn" onclick="toggleSidebar()">
+           <i class="fas fa-bars"></i>
+        </button>
+
+        <div class="header animate-fade-in">
+            <div>
+                <h1 class="page-title">{% block page_title %}Dashboard{% endblock %}</h1>
+                <p class="page-sub">{% block page_sub %}{% endblock %}</p>
+            </div>
+            <div class="topbar-actions">
+                {% block topbar_actions %}{% endblock %}
+                <div class="user-profile">
+                    <div style="text-align:right; display:none;" class="user-name-wrap">
+                        <div style="font-size:13px; font-weight:600;">{{ request.user.username }}</div>
+                        <div style="font-size:11px; color:var(--text-secondary);">Admin</div>
+                    </div>
+                    <div class="user-avatar">{{ request.user.username|first|upper }}</div>
+                </div>
+            </div>
+        </div>
+
+        {% for msg in messages %}
+        <div class="alert alert-{{ msg.tags }} animate-fade-in">
+            <i class="fas fa-{% if msg.tags == 'success' %}check-circle{% elif msg.tags == 'warning' %}exclamation-triangle{% else %}exclamation-circle{% endif %}"></i>
+            {{ msg }}
+        </div>
+        {% endfor %}
+
+        <div class="animate-fade-in" style="animation-delay:0.08s;">
+            {% block content %}{% endblock %}
+        </div>
+    </main>
+
+    <script>
+        // Mobil yon menyu ochish/yopish (orqa fon bilan)
+        function toggleSidebar(){
+            var open = document.getElementById('sidebar').classList.toggle('open');
+            document.getElementById('sidebarBackdrop').classList.toggle('show', open);
+        }
+        function closeSidebar(){
+            document.getElementById('sidebar').classList.remove('open');
+            document.getElementById('sidebarBackdrop').classList.remove('show');
+        }
+        // Menyudagi havolaga bosilganda telefonda menyu o'zi yopiladi
+        document.querySelectorAll('.sidebar .nav-link').forEach(function(a){
+            a.addEventListener('click', function(){ if (window.innerWidth <= 900) closeSidebar(); });
+        });
+
+        function openModal(id){
+            var m = document.getElementById(id);
+            if (m && m.parentNode !== document.body) {
+                document.body.appendChild(m);
+            }
+            if (m) m.classList.add('show');
+        }
+        function closeModal(id){
+            var m = document.getElementById(id);
+            if (m) m.classList.remove('show');
+        }
+        document.addEventListener('click', function(e){
+            if (e.target.classList && e.target.classList.contains('modal-overlay')) {
+                e.target.classList.remove('show');
+            }
+        });
+    </script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

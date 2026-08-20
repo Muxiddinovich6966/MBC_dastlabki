@@ -1,0 +1,282 @@
+{% extends 'base.html' %}
+{% block title %}{{ user_obj }}{% endblock %}
+{% block page_title %}{{ profile.name|default:"Foydalanuvchi" }} {{ profile.surname }}{% endblock %}
+{% block page_sub %}@{{ user_obj.tg_username|default:"—" }} — Telegram ID: {{ user_obj.tg_id }}{% endblock %}
+
+{% block topbar_actions %}
+<button class="btn btn-primary" onclick="openModal('sendMsgModal')"><i class="fas fa-paper-plane"></i> Xabar yuborish</button>
+<a href="{% url 'user_send_to_trips' user_obj.id %}" class="btn btn-primary"
+   onclick="if(!confirm('Bu foydalanuvchi ma\'lumoti Safarlar guruhiga yuborilsinmi?')) return false; this.innerHTML='<i class=\'fas fa-spinner fa-spin\'></i> Tekshirilmoqda...';">
+    <i class="fas fa-paper-plane"></i> Safarlar guruhiga
+</a>
+<a href="{% url 'users_list' %}" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> Orqaga</a>
+{% endblock %}
+
+{% block content %}
+<div class="detail-grid">
+
+    <!-- CHAP: rasm + ID + QR -->
+    <div class="glass-panel" style="text-align:center;">
+        {% if profile.photo %}
+        <img src="{{ profile.photo.url }}" onclick="openPhoto('{{ profile.photo.url }}')"
+             style="width:160px; height:160px; object-fit:cover; border-radius:16px; cursor:pointer; border:2px solid var(--border);">
+        {% else %}
+        <div style="width:160px; height:160px; border-radius:16px; background:var(--accent); display:flex; align-items:center; justify-content:center; font-size:54px; font-weight:700; color:#fff; margin:0 auto;">
+            {{ profile.name|default:user_obj.tg_username|default:"?"|first|upper }}
+        </div>
+        {% endif %}
+
+        <!-- Rasm yuklash / almashtirish / o'chirish -->
+        <div style="margin-top:12px; display:flex; gap:8px; justify-content:center;">
+            <form method="post" action="{% url 'user_photo_upload' user_obj.id %}" enctype="multipart/form-data" style="display:inline;">
+                {% csrf_token %}
+                <input type="file" name="photo" accept="image/*" id="photoInput" style="display:none;" onchange="this.form.submit()">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('photoInput').click()">
+                    <i class="fas fa-camera"></i> {% if profile.photo %}Almashtirish{% else %}Rasm yuklash{% endif %}
+                </button>
+            </form>
+            {% if profile.photo %}
+            <form method="post" action="{% url 'user_photo_upload' user_obj.id %}" style="display:inline;"
+                  onsubmit="return confirm('Rasm o\'chirilsinmi?')">
+                {% csrf_token %}
+                <input type="hidden" name="remove" value="1">
+                <button type="submit" class="btn btn-danger btn-sm" title="Rasmni o'chirish"><i class="fas fa-trash"></i></button>
+            </form>
+            {% endif %}
+        </div>
+
+        <h3 style="margin-top:16px; font-weight:600;">{{ profile.name }} {{ profile.surname }}</h3>
+        <p style="color:var(--text-secondary); font-size:13px; margin-top:4px;">{{ profile.industry|default:"—" }}</p>
+
+        {% if user_obj.unique_id %}
+        <div style="margin-top:16px;">
+            <span style="color:var(--text-secondary); font-size:12px;">SHAXSIY ID</span>
+            <div style="font-size:28px; font-weight:700; color:var(--accent); letter-spacing:2px;">{{ user_obj.unique_id }}</div>
+        </div>
+        <div style="margin-top:16px;">
+            <img src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data={{ user_obj.unique_id }}"
+                 style="width:160px; height:160px; border-radius:12px; background:#fff; padding:8px;">
+        </div>
+        {% else %}
+        <p style="color:var(--text-secondary); font-size:12px; margin-top:16px;">ID hali berilmagan</p>
+        {% endif %}
+        {% if profile.sent_to_trips_at %}
+         <div style="margin-top:12px;">
+         <span class="badge badge-success"><i class="fas fa-check"></i> Safarlar guruhiga yuborilgan</span>
+         </div>
+         {% endif %}
+
+        {% if trips_logs %}
+        <div style="margin-top:16px; text-align:left; border-top:1px solid var(--border); padding-top:12px;">
+            <div style="color:var(--text-secondary); font-size:12px; margin-bottom:8px;">
+                <i class="fas fa-paper-plane"></i> SAFARLARGA YUBORISH TARIXI ({{ trips_logs|length }})
+            </div>
+            {% for log in trips_logs %}
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px 0; font-size:12px; {% if not forloop.last %}border-bottom:1px dashed var(--border);{% endif %}">
+                <span>
+                    {% if log.success %}<i class="fas fa-check-circle" style="color:#22c55e;"></i>{% else %}<i class="fas fa-times-circle" style="color:#ef4444;"></i>{% endif %}
+                    <strong>{{ log.sent_by.get_username|default:"—" }}</strong>
+                    {% if not log.was_member %}<span class="badge badge-warning" style="font-size:10px;">a'zo emas edi</span>{% endif %}
+                </span>
+                <span style="color:var(--text-muted); white-space:nowrap;">{{ log.created_at|date:"d.m.Y H:i" }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- O'NG: ma'lumotlar + obunalar + tadbir javoblari -->
+    <div style="display:grid; gap:24px;">
+
+        <div class="glass-panel">
+            <h3 style="margin-bottom:20px; font-weight:600;"><i class="fas fa-id-card" style="color:var(--accent)"></i> Shaxsiy ma'lumotlar</h3>
+            {% if profile %}
+            <div class="two-col" style="gap:14px;">
+                <div><span style="color:var(--text-secondary); font-size:12px;">TO'LIQ ISMI</span><br><strong>{{ profile.name }} {{ profile.surname }}</strong></div>
+                <div><span style="color:var(--text-secondary); font-size:12px;">TELEFON</span><br><strong>{{ profile.phone|default:"—" }}</strong></div>
+                <div><span style="color:var(--text-secondary); font-size:12px;">TUG'ILGAN SANA</span><br><strong>{{ profile.birth_date|default:"—" }}</strong></div>
+                <div><span style="color:var(--text-secondary); font-size:12px;">INSTAGRAM</span><br><strong>{{ profile.instagram|default:"—" }}</strong></div>
+                <div><span style="color:var(--text-secondary); font-size:12px;">TUG'ILGAN VILOYAT</span><br><strong>{{ profile.birth_place|default:"—" }}</strong></div>
+                <div><span style="color:var(--text-secondary); font-size:12px;">FAOLIYAT MANZILI</span><br><strong>{{ profile.work_location|default:"—" }}</strong></div>
+                <div><span style="color:var(--text-secondary); font-size:12px;">SOHA</span><br><strong>{{ profile.industry|default:"—" }}</strong></div>
+                <div><span style="color:var(--text-secondary); font-size:12px;">BREND / KOMPANIYA</span><br><strong>{{ profile.brand|default:"—" }}</strong></div>
+                <div><span style="color:var(--text-secondary); font-size:12px;">VEBSAYT</span><br><strong>{{ profile.website|default:"—" }}</strong></div>
+                <div><span style="color:var(--text-secondary); font-size:12px;">YILLIK AYLANMA</span><br><strong>{{ profile.turnover|default:"—" }}</strong></div>
+                <div><span style="color:var(--text-secondary); font-size:12px;">XODIMLAR SONI</span><br><strong>{{ profile.staff_count|default:"—" }}</strong></div>
+                <div><span style="color:var(--text-secondary); font-size:12px;">KOMPANIYADAGI MAQOMI</span><br><strong>{{ profile.company_role|default:"—" }}</strong></div>
+                <div><span style="color:var(--text-secondary); font-size:12px;">BIZNES MAQSADI</span><br><strong>{{ profile.goal|default:"—" }}</strong></div>
+                <div><span style="color:var(--text-secondary); font-size:12px;">KLUBGA QO'SHILGAN</span><br><strong>{{ profile.join_date|default:"—" }}</strong></div>
+                <div style="grid-column:1/3;"><span style="color:var(--text-secondary); font-size:12px;">SAFARLAR</span><br><strong>{% if profile.selected_trips %}{{ profile.selected_trips|join:", " }}{% else %}—{% endif %}</strong></div>
+                <div style="grid-column:1/3;"><span style="color:var(--text-secondary); font-size:12px;">TILLAR</span><br><strong>{% if profile.languages %}{{ profile.languages|join:", " }}{% else %}—{% endif %}</strong></div>
+                <div style="grid-column:1/3;"><span style="color:var(--text-secondary); font-size:12px;">QO'SHILISH SABABI</span><br><strong>{{ profile.reason|default:"—" }}</strong></div>
+                <div style="grid-column:1/3;"><span style="color:var(--text-secondary); font-size:12px;">QIYINCHILIKLAR</span><br><strong>{{ profile.problems|default:"—" }}</strong></div>
+                <div><span style="color:var(--text-secondary); font-size:12px;">NDA ROZILIGI</span><br><strong>{% if profile.nda == 'yes' %}Roziman{% elif profile.nda == 'no' %}Rozi emasman{% else %}—{% endif %}</strong></div>
+                <div><span style="color:var(--text-secondary); font-size:12px;">KOMPANIYA TASHRIFI</span><br><strong>{% if profile.visit == 'yes' %}Ha{% elif profile.visit == 'no' %}Hozircha yo'q{% else %}—{% endif %}</strong></div>
+            </div>
+            {% else %}
+            <p style="color:var(--text-secondary)">Bu foydalanuvchi anketani to'liq to'ldirmagan.</p>
+            {% endif %}
+        </div>
+
+        <!-- OBUNALAR -->
+        <div class="glass-panel">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px;">
+                <h3 style="font-weight:600;">
+                    <i class="fas fa-crown" style="color:#f59e0b"></i> Obunalar
+                    {% if user_obj.subscription_status == 'active' %}
+                        <span class="badge badge-success" style="margin-left:8px;"><i class="fas fa-check-circle"></i> Faol · {{ user_obj.active_plan.end_date|date:"d.m.Y" }} gacha</span>
+                    {% elif user_obj.subscription_status == 'expired' %}
+                        <span class="badge badge-danger" style="margin-left:8px;"><i class="fas fa-times-circle"></i> Muddati tugagan</span>
+                    {% endif %}
+                </h3>
+                <button class="btn btn-primary btn-sm" onclick="openModal('addPlanModal')"><i class="fas fa-plus"></i> Qo'shish</button>
+            </div>
+            {% if plans %}
+            <div class="table-container">
+                <table>
+                    <thead><tr><th>Narx</th><th>Boshlanish</th><th>Tugash</th><th>Holat</th><th>To'lov</th><th>Izoh</th><th></th></tr></thead>
+                    <tbody>
+                        {% for plan in plans %}
+                        <tr>
+                            <td><strong>{{ plan.price|floatformat:0 }} so'm</strong></td>
+                            <td>{{ plan.start_date|date:"d.m.Y" }}</td>
+                            <td>{{ plan.end_date|date:"d.m.Y" }}</td>
+                            <td>
+                                {% if plan.is_expired %}
+                                    <span class="badge badge-danger">Tugagan</span>
+                                {% else %}
+                                    <span class="badge badge-success">Faol</span>
+                                {% endif %}
+                            </td>
+                            <td><span class="badge badge-info">{{ plan.get_payment_type_display }}</span></td>
+                            <td style="color:var(--text-secondary)">{{ plan.note|default:"—" }}</td>
+                            <td>
+                                <a href="{% url 'user_plan_delete' user_obj.id plan.id %}" class="btn btn-danger btn-sm btn-icon"
+                                   title="O'chirish" onclick="return confirm('Obuna o\'chirilsinmi?')">
+                                    <i class="fas fa-trash"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p style="color:var(--text-secondary); font-size:13px;">Hozircha obuna yo'q.</p>
+            {% endif %}
+        </div>
+
+        <!-- TADBIR JAVOBLARI -->
+        <div class="glass-panel">
+            <h3 style="margin-bottom:20px; font-weight:600;"><i class="fas fa-calendar-alt" style="color:var(--accent)"></i> Tadbirlardagi javoblari</h3>
+            <div class="table-container">
+                <table>
+                    <thead><tr><th>Tadbir</th><th>Javobi</th><th>Keldi</th></tr></thead>
+                    <tbody>
+                        {% for r in event_responses %}
+                        <tr>
+                            <td>{{ r.event.name }}</td>
+                            <td>
+                                {% if r.rsvp_choice == 'boraman' %}<span class="badge badge-success">✅ Boraman</span>
+                                {% elif r.rsvp_choice == 'balki_borarman' %}<span class="badge badge-info">🤔 Balki borarman</span>
+                                {% elif r.rsvp_choice == 'balki_bormasman' %}<span class="badge badge-warning">😐 Balki bormasman</span>
+                                {% elif r.rsvp_choice == 'bormayman' %}<span class="badge badge-danger">❌ Bormayman</span>
+                                {% else %}<span class="badge badge-warning">Javob yo'q</span>{% endif %}
+                            </td>
+                            <td>{% if r.is_attendance %}<i class="fas fa-check" style="color:var(--success)"></i>{% else %}—{% endif %}</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="3" style="text-align:center; color:var(--text-secondary); padding:20px;">Hech qaysi tadbirga javob bermagan</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- Xabar yuborish modali -->
+<div class="modal-overlay" id="sendMsgModal">
+    <div class="modal">
+        <div class="modal-header">
+            <div class="modal-title"><i class="fas fa-paper-plane"></i> Telegram xabar yuborish</div>
+            <button class="modal-close" onclick="closeModal('sendMsgModal')">&times;</button>
+        </div>
+        <form method="post" action="{% url 'user_send_message' user_obj.id %}">
+            {% csrf_token %}
+            <div class="modal-body">
+                <p style="color:var(--text-secondary); font-size:13px; margin-bottom:16px;">
+                    Xabar <strong>{{ profile.name|default:user_obj.tg_username }}</strong> ga Telegram orqali yuboriladi.
+                </p>
+                <div class="form-group">
+                    <label class="form-label">Xabar matni</label>
+                    <textarea name="text" class="form-control" rows="5" placeholder="Xabar yozing..." required></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('sendMsgModal')">Bekor qilish</button>
+                <button type="submit" class="btn btn-primary"><i class="fas fa-paper-plane"></i> Yuborish</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Obuna qo'shish modali -->
+<div class="modal-overlay" id="addPlanModal">
+    <div class="modal">
+        <div class="modal-header">
+            <div class="modal-title"><i class="fas fa-crown"></i> Yangi obuna qo'shish</div>
+            <button class="modal-close" onclick="closeModal('addPlanModal')">&times;</button>
+        </div>
+        <form method="post" action="{% url 'user_plan_add' user_obj.id %}">
+            {% csrf_token %}
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Narx (so'm)</label>
+                    <input type="number" name="price" class="form-control" placeholder="500000" required>
+                </div>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label class="form-label">Boshlanish sanasi</label>
+                        <input type="date" name="start_date" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Tugash sanasi</label>
+                        <input type="date" name="end_date" class="form-control" required>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">To'lov turi</label>
+                    <select name="payment_type" class="form-control">
+                        <option value="cash">Naqd</option>
+                        <option value="card">Karta</option>
+                        <option value="transfer">O'tkazma</option>
+                        <option value="other">Boshqa</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Izoh (ixtiyoriy)</label>
+                    <textarea name="note" class="form-control" rows="2" placeholder="..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('addPlanModal')">Bekor qilish</button>
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Saqlash</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Rasm kattalashtirish modal -->
+<div class="modal-overlay" id="photoModal" onclick="closeModal('photoModal')">
+    <img id="bigPhoto" src="" style="max-width:90vw; max-height:90vh; border-radius:16px;">
+</div>
+
+<script>
+function openPhoto(url){
+    document.getElementById('bigPhoto').src = url;
+    document.getElementById('photoModal').classList.add('show');
+}
+</script>
+{% endblock %}

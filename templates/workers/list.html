@@ -1,0 +1,80 @@
+{% extends 'base.html' %}
+{% block title %}Ishchilar{% endblock %}
+{% block page_title %}Ishchilar{% endblock %}
+{% block page_sub %}Vazifa bajaradigan ishchilar va boshliqlar — jami {{ workers.count }} ta{% endblock %}
+
+{% block topbar_actions %}
+<a href="{% url 'templates_list' %}" class="btn btn-secondary"><i class="fas fa-copy"></i> Shablonlar</a>
+<a href="{% url 'work_events_list' %}" class="btn btn-secondary"><i class="fas fa-calendar-alt"></i> Tadbirlar</a>
+<button class="btn btn-primary" onclick="openModal('addWorkerModal')"><i class="fas fa-plus"></i> Ishchi qo'shish</button>
+{% endblock %}
+
+{% block content %}
+<div class="glass-panel">
+    <div class="table-container">
+        <table>
+            <thead><tr><th>Ismi</th><th>Telegram ID</th><th>Roli</th><th></th></tr></thead>
+            <tbody>
+                {% for w in workers %}
+                <tr>
+                    <td>
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <div class="avatar-sm">{{ w.name|default:"?"|first|upper }}</div>
+                            <strong>{{ w.name }}</strong>
+                        </div>
+                    </td>
+                    <td>{{ w.telegram_id }}</td>
+                    <td>
+                        {% if w.role == 'boss' %}<span class="badge badge-info">Boshliq</span>
+                        {% elif w.role == 'admin' %}<span class="badge badge-success">Admin</span>
+                        {% else %}<span class="badge badge-warning">Ishchi</span>{% endif %}
+                    </td>
+                    <td>
+                        <div style="display:flex; gap:6px;">
+                            <a href="{% url 'worker_edit' w.id %}" class="btn btn-secondary btn-sm btn-icon" title="Tahrirlash"><i class="fas fa-edit"></i></a>
+                            <a href="{% url 'worker_delete' w.id %}" class="btn btn-danger btn-sm btn-icon" title="O'chirish" onclick="return confirm('O\'chirilsinmi?')"><i class="fas fa-trash"></i></a>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="4"><div class="empty-state"><i class="fas fa-user-tie"></i><p>Hozircha ishchilar yo'q</p></div></td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="modal-overlay" id="addWorkerModal">
+    <div class="modal">
+        <div class="modal-header">
+            <div class="modal-title">Ishchi qo'shish</div>
+            <button class="modal-close" onclick="closeModal('addWorkerModal')">&times;</button>
+        </div>
+        <form method="post">
+            {% csrf_token %}
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Ismi</label>
+                    <input type="text" name="name" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Telegram ID</label>
+                    <input type="text" name="telegram_id" class="form-control" placeholder="123456789" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Roli</label>
+                    <select name="role" class="form-control">
+                        <option value="worker">Ishchi</option>
+                        <option value="boss">Boshliq</option>
+                        <option value="admin">Admin</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('addWorkerModal')">Bekor qilish</button>
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Saqlash</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

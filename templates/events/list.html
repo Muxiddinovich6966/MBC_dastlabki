@@ -1,0 +1,327 @@
+{% extends 'base.html' %}
+{% block title %}Tadbirlar{% endblock %}
+{% block page_title %}Tadbirlar{% endblock %}
+{% block page_sub %}Jami {{ events.count }} ta tadbir{% endblock %}
+
+{% block topbar_actions %}
+<button class="btn btn-primary" onclick="openModal('addEventModal')">
+    <i class="fas fa-plus"></i> Yangi tadbir
+</button>
+{% endblock %}
+
+{% block content %}
+<style>
+.group-toggle-list { display:flex; flex-wrap:wrap; gap:8px; margin-top:6px; }
+.group-toggle { cursor:pointer; margin:0; }
+.group-toggle input { position:absolute; opacity:0; width:0; height:0; }
+.group-toggle-chip {
+    display:inline-flex; align-items:center; gap:7px;
+    padding:8px 13px; border-radius:20px; font-size:13px;
+    background:var(--surface-2); color:var(--text-secondary);
+    border:1.5px solid rgba(255,255,255,0.10); transition:all .15s;
+    user-select:none;
+}
+.group-toggle-chip .chip-check { opacity:0; font-size:11px; transition:opacity .15s; }
+.group-toggle:hover .group-toggle-chip { border-color:var(--accent); color:var(--text-primary); }
+.group-toggle input:checked + .group-toggle-chip {
+    background:var(--accent-light); color:var(--accent);
+    border-color:var(--accent); font-weight:600;
+}
+.group-toggle input:checked + .group-toggle-chip .chip-check { opacity:1; }
+</style>
+<div class="glass-panel">
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Tadbir</th>
+                    <th>Sana / Vaqt</th>
+                    <th>Manzil</th>
+                    <th>Speaker</th>
+                    <th>Javoblar</th>
+                    <th>Holati</th>
+                    <th style="text-align:right;">Amallar</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for e in events %}
+                <tr>
+                    <td>
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            {% if e.image %}
+                            <img src="{{ e.image.url }}" style="width:38px; height:38px; border-radius:8px; object-fit:cover; flex-shrink:0;">
+                            {% else %}
+                            <div style="width:38px; height:38px; border-radius:8px; background:var(--accent-light); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                                <i class="fas fa-calendar" style="color:var(--accent); font-size:14px;"></i>
+                            </div>
+                            {% endif %}
+                            <div>
+                                <div style="font-weight:600;">{{ e.name }}</div>
+                                {% if e.theme %}<div style="color:var(--text-secondary); font-size:12px;">{{ e.theme }}</div>{% endif %}
+                            </div>
+                        </div>
+                    </td>
+                    <td>
+                        <div style="font-weight:500;">{{ e.date }}</div>
+                        <div style="color:var(--text-secondary); font-size:12px;"><i class="fas fa-clock" style="font-size:10px;"></i> {{ e.time }}</div>
+                    </td>
+                    <td style="color:var(--text-secondary); max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                        {% if e.latitude and e.longitude %}
+                        <a href="https://maps.google.com/?q={{ e.latitude }},{{ e.longitude }}" target="_blank"
+                           style="color:var(--accent); text-decoration:none;" title="{{ e.location }}">
+                            <i class="fas fa-map-marker-alt"></i> {{ e.location|truncatechars:20 }}
+                        </a>
+                        {% else %}
+                        {{ e.location|default:"—" }}
+                        {% endif %}
+                    </td>
+                    <td style="color:var(--text-secondary);">{{ e.speaker|default:"—" }}</td>
+                    <td>
+                        <span class="badge badge-info">
+                            <i class="fas fa-users" style="font-size:10px;"></i> {{ e.responses.count }}
+                        </span>
+                    </td>
+                    <td>
+                        <div style="display:flex; flex-direction:column; gap:4px;">
+                            {% if e.sent %}
+                            <span class="badge badge-success"><i class="fas fa-check"></i> Yuborilgan</span>
+                            {% else %}
+                            <span class="badge badge-warning"><i class="fas fa-clock"></i> Kutilmoqda</span>
+                            {% endif %}
+                            {% if e.is_active %}
+                            <span class="badge badge-info"><i class="fas fa-circle" style="font-size:7px;"></i> Faol</span>
+                            {% else %}
+                            <span class="badge" style="background:rgba(100,116,139,0.15); color:#94a3b8;">
+                                <i class="fas fa-circle" style="font-size:7px;"></i> Nofaol
+                            </span>
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td>
+                        <div style="display:flex; gap:5px; justify-content:flex-end;">
+                            <a href="{% url 'event_detail' e.id %}" class="btn btn-secondary btn-sm btn-icon" title="Ko'rish">
+                                <i class="fas fa-eye"></i>
+                            </a>
+                            <a href="{% url 'event_edit' e.id %}" class="btn btn-secondary btn-sm btn-icon" title="Tahrirlash">
+                                <i class="fas fa-edit"></i>
+                            </a>
+                            <a href="{% url 'event_checkin' e.id %}" class="btn btn-secondary btn-sm btn-icon" title="Check-in">
+                                <i class="fas fa-qrcode"></i>
+                            </a>
+                            <a href="{% url 'event_toggle_active' e.id %}"
+                               class="btn btn-sm btn-icon {% if e.is_active %}btn-success{% else %}btn-secondary{% endif %}"
+                               title="{% if e.is_active %}Nofaol qilish{% else %}Faollashtirish{% endif %}">
+                                <i class="fas fa-power-off"></i>
+                            </a>
+                            {% if not e.sent %}
+                            <a href="{% url 'event_send_now' e.id %}" class="btn btn-primary btn-sm btn-icon" title="Yuborish"
+                               onclick="return confirm('Tadbir hozir yuborilsinmi?')">
+                                <i class="fas fa-paper-plane"></i>
+                            </a>
+                            {% endif %}
+                            <a href="{% url 'event_delete' e.id %}" class="btn btn-danger btn-sm btn-icon" title="O'chirish"
+                               onclick="return confirm('Rostdan o\'chirilsinmi?')">
+                                <i class="fas fa-trash"></i>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7">
+                        <div class="empty-state">
+                            <i class="fas fa-calendar-times"></i>
+                            <p>Hozircha tadbirlar yo'q</p>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- YANGI TADBIR MODAL -->
+<div class="modal-overlay" id="addEventModal">
+    <div class="modal">
+        <div class="modal-header">
+            <div class="modal-title"><i class="fas fa-calendar-plus" style="color:var(--accent)"></i> Yangi tadbir qo'shish</div>
+            <button class="modal-close" onclick="closeModal('addEventModal')">&times;</button>
+        </div>
+        <form method="post" enctype="multipart/form-data" onsubmit="return checkGroupsSelected(this)">
+            {% csrf_token %}
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Ishchilar tadbirini tanlang <span style="color:var(--danger)">*</span></label>
+                    <select name="work_event_id" id="workEventSelect" class="form-control" required onchange="fillFromWorkEvent(this)">
+                        <option value="">— Tadbirni tanlang —</option>
+                        {% for we in work_events %}
+                        <option value="{{ we.id }}" data-name="{{ we.name }}" data-date="{{ we.event_date|date:'d.m.Y' }}" data-time="{{ we.event_time|time:'H:i' }}">
+                            {{ we.name }} — {{ we.event_date|date:'d.m.Y' }}{% if we.event_time %} {{ we.event_time|time:'H:i' }}{% endif %}
+                        </option>
+                        {% endfor %}
+                    </select>
+                    {% if not work_events %}
+                    <small style="color:var(--warning); font-size:12px;">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        Kelajakdagi ishchilar tadbiri yo'q. Avval <a href="{% url 'work_events_list' %}">Ishchilar bo'limida</a> tadbir yarating.
+                    </small>
+                    {% else %}
+                    <small style="color:var(--text-secondary); font-size:12px;">Nomi, sanasi va vaqti shu tadbirdan avtomatik olinadi</small>
+                    {% endif %}
+                </div>
+
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label class="form-label">Tadbir nomi (avtomatik)</label>
+                        <input type="text" id="autoName" class="form-control" readonly
+                               placeholder="Yuqoridan tanlang"
+                               style="background:rgba(255,255,255,0.03); cursor:not-allowed; color:var(--text-secondary);">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Sana (avtomatik)</label>
+                        <input type="text" id="autoDate" class="form-control" readonly
+                               placeholder="Yuqoridan tanlang"
+                               style="background:rgba(255,255,255,0.03); cursor:not-allowed; color:var(--text-secondary);">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Mavzu</label>
+                    <input type="text" name="theme" class="form-control" placeholder="Asosiy mavzu...">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Vaqt (avtomatik)</label>
+                    <input type="text" id="autoTime" class="form-control" readonly
+                           placeholder="Yuqoridan tanlang"
+                           style="background:rgba(255,255,255,0.03); cursor:not-allowed; color:var(--text-secondary);">
+                    <small style="color:var(--text-secondary); font-size:12px;">Nomi, sanasi va vaqti ishchilar tadbiridan avtomatik olinadi</small>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Joy (Venue) <span style="color:var(--danger)">*</span></label>
+                    <select name="venue_id" id="addVenueSelect" class="form-control" required onchange="fillAddVenue(this)">
+                        <option value="">— Joy tanlang —</option>
+                        {% for v in venues %}
+                        <option value="{{ v.id }}"
+                                data-name="{{ v.name }}"
+                                data-address="{{ v.address }}"
+                                data-lat="{{ v.latitude }}"
+                                data-lng="{{ v.longitude }}">
+                            {{ v.name }}{% if v.address %} — {{ v.address }}{% endif %}
+                        </option>
+                        {% endfor %}
+                    </select>
+                    {% if not venues %}
+                    <small style="color:var(--warning); font-size:12px;">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        Hali joy qo'shilmagan. <a href="{% url 'venues_list' %}">Manzillar sahifasiga o'ting</a>.
+                    </small>
+                    {% endif %}
+                </div>
+                <div id="addVenueInfo" style="display:none; background:var(--surface-2); border-radius:8px; padding:10px 14px; margin-bottom:12px; font-size:13px; color:var(--text-secondary);">
+                    <i class="fas fa-map-marker-alt" style="color:var(--accent);"></i>
+                    <span id="addVenueAddress"></span>
+                    <span id="addVenueCoords" style="margin-left:10px; opacity:0.7;"></span>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Speaker</label>
+                    <input type="text" name="speaker" class="form-control" placeholder="Ism Familiya">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Tavsif</label>
+                    <textarea name="description" class="form-control" placeholder="Tadbir haqida qisqacha..." required></textarea>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Kategoriya</label>
+                    <select name="category" class="form-control">
+                        <option value="conference">Konferensiya</option>
+                        <option value="workshop">Workshop</option>
+                        <option value="networking">Networking</option>
+                        <option value="other">Boshqa</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Rasm</label>
+                    <input type="file" name="image" class="form-control" accept="image/*">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Yuboriladigan guruhlar
+                        <small style="color:var(--text-secondary); font-weight:400;">— tanlash uchun bosing</small>
+                    </label>
+                    {% if groups %}
+                    <div class="group-toggle-list">
+                        {% for g in groups %}
+                        <label class="group-toggle">
+                            <input type="checkbox" name="send_groups" value="{{ g.id }}">
+                            <span class="group-toggle-chip">
+                                <i class="fas fa-users chip-ico"></i>
+                                <span class="chip-title">{{ g.title }}</span>
+                                <i class="fas fa-check chip-check"></i>
+                            </span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <small style="color:var(--warning); font-size:12px;">
+                        <i class="fas fa-exclamation-triangle"></i> Hali guruh qo'shilmagan.
+                    </small>
+                    {% endif %}
+                </div>
+                <div class="form-group">
+                    <label style="display:flex; align-items:center; gap:10px; cursor:pointer; color:var(--text-secondary); font-size:13px;">
+                        <input type="checkbox" name="send_to_all_users" checked style="width:15px; height:15px; accent-color:var(--accent);">
+                        Hamma ro'yxatdan o'tgan foydalanuvchiga yuborilsin
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('addEventModal')">Bekor qilish</button>
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Saqlash</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function checkGroupsSelected(form) {
+    var checked = form.querySelectorAll('input[name="send_groups"]:checked').length;
+    if (checked === 0) {
+        alert("Iltimos, qaysi guruh yoki kanalga ketishini belgilang.");
+        return false;
+    }
+    return true;
+}
+
+function fillFromWorkEvent(sel) {
+    var opt = sel.options[sel.selectedIndex];
+    document.getElementById('autoName').value = opt.getAttribute('data-name') || '';
+    document.getElementById('autoDate').value = opt.getAttribute('data-date') || '';
+    // Vaqtni ham avtomatik olamiz (ishchilar tadbirida bor bo'lsa)
+    var t = opt.getAttribute('data-time') || '';
+    if (t) {
+        document.getElementById('autoTime').value = t;
+    }
+}
+
+function fillAddVenue(sel) {
+    var opt = sel.options[sel.selectedIndex];
+    var address = opt.getAttribute('data-address') || '';
+    var lat = opt.getAttribute('data-lat') || '';
+    var lng = opt.getAttribute('data-lng') || '';
+    var name = opt.getAttribute('data-name') || '';
+    var info = document.getElementById('addVenueInfo');
+    if (name) {
+        document.getElementById('addVenueAddress').textContent = address || name;
+        document.getElementById('addVenueCoords').textContent = (lat && lng) ? lat + ', ' + lng : '';
+        info.style.display = 'block';
+    } else {
+        info.style.display = 'none';
+    }
+}
+</script>
+{% endblock %}

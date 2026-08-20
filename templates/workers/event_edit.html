@@ -1,0 +1,44 @@
+{% extends 'base.html' %}
+{% block title %}Tadbirni tahrirlash{% endblock %}
+{% block page_title %}Tadbirni tahrirlash{% endblock %}
+{% block page_sub %}{{ work_event.name }}{% endblock %}
+
+{% block topbar_actions %}
+<a href="{% url 'work_events_list' %}" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> Orqaga</a>
+{% endblock %}
+
+{% block content %}
+<div class="glass-panel">
+    <form method="post">
+        {% csrf_token %}
+        <div class="form-group">
+            <label class="form-label">Tadbir nomi</label>
+            <input type="text" name="name" class="form-control" value="{{ work_event.name }}" required>
+        </div>
+        <div class="form-grid">
+            <div class="form-group">
+                <label class="form-label">Sana</label>
+                <input type="date" name="event_date" class="form-control" value="{{ work_event.event_date|date:'Y-m-d' }}" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Vaqt <span style="color:var(--danger)">*</span></label>
+                <input type="time" name="event_time" class="form-control" value="{{ work_event.event_time|time:'H:i' }}" required>
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Shablon</label>
+            <select name="template" class="form-control">
+                <option value="">— Shablonsiz —</option>
+                {% for t in templates %}
+                <option value="{{ t.id }}" {% if work_event.template_id == t.id %}selected{% endif %}>{{ t.name }} ({{ t.tasks.count }} vazifa)</option>
+                {% endfor %}
+            </select>
+            <small style="color:var(--text-secondary); font-size:12px;">Diqqat: shablon o'zgartirilsa, eski vazifalar o'chib, yangi shablon vazifalari yaratiladi</small>
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
+            <a href="{% url 'work_events_list' %}" class="btn btn-secondary">Bekor qilish</a>
+            <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Saqlash</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

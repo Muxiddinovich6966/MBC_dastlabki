@@ -1,0 +1,87 @@
+{% extends 'base.html' %}
+{% block title %}Safarlar guruhiga yuborish{% endblock %}
+{% block page_title %}Safarlar guruhiga yuborish{% endblock %}
+{% block page_sub %}Guruh a'zolari tekshirildi{% endblock %}
+
+{% block topbar_actions %}
+<a href="{% url 'users_list' %}" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> Orqaga</a>
+{% endblock %}
+
+{% block content %}
+<div class="glass-panel" style="margin-bottom:20px;">
+    {% if count %}
+    <div style="display:flex; align-items:center; gap:16px; margin-bottom:20px;">
+        <div class="stat-card-icon purple" style="margin-bottom:0;"><i class="fas fa-paper-plane"></i></div>
+        <div>
+            <div style="font-size:26px; font-weight:800; line-height:1;">{{ count }} ta</div>
+            <div style="color:var(--text-secondary); font-size:13px;">a'zo topildi va yuborishga tayyor</div>
+        </div>
+    </div>
+
+    <div class="alert alert-warning">
+        <i class="fas fa-exclamation-triangle"></i>
+        Tasdiqlasangiz, quyidagi {{ count }} ta a'zoning ma'lumoti Safarlar guruhiga ketma-ket yuboriladi.
+        <b>«Avval yuborilgan»</b> belgili a'zolarga ham qayta yuboriladi.
+    </div>
+
+    <div class="table-container" style="max-height:400px; overflow-y:auto;">
+        <table>
+            <thead><tr><th>Foydalanuvchi</th><th>Telefon</th><th>Manzil</th><th>Holat</th></tr></thead>
+            <tbody>
+                {% for u in members %}
+                <tr>
+                    <td>
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            {% if u.profile.photo %}
+                            <img src="{{ u.profile.photo.url }}" class="avatar-sm">
+                            {% else %}
+                            <div class="avatar-sm">{{ u.profile.name|default:u.tg_username|default:"?"|first|upper }}</div>
+                            {% endif %}
+                            <strong>{{ u.profile.name }} {{ u.profile.surname }}</strong>
+                        </div>
+                    </td>
+                    <td style="color:var(--text-secondary);">{{ u.profile.phone|default:"—" }}</td>
+                    <td style="color:var(--text-secondary);">{{ u.profile.work_location|default:"—" }}</td>
+                    <td>
+                        {% if u.already_sent %}
+                        <span class="badge badge-warning" style="font-size:11px;">Avval yuborilgan</span>
+                        {% else %}
+                        <span class="badge badge-success" style="font-size:11px;">Yangi</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <form method="post" style="margin-top:20px; display:flex; gap:10px; justify-content:flex-end;"
+          onsubmit="return onTripsSend(this);">
+        {% csrf_token %}
+        <a href="{% url 'users_list' %}" class="btn btn-secondary">Bekor qilish</a>
+        <button type="submit" id="tripsSendBtn" class="btn btn-primary">
+            <i class="fas fa-paper-plane"></i> Ha, {{ count }} tasini yuborish
+        </button>
+    </form>
+
+    <script>
+    function onTripsSend(form) {
+        var btn = document.getElementById('tripsSendBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Yuborilmoqda... ({{ count }} ta)';
+        return true;  // forma yuboriladi; tugagach ro'yxatga "✅ Yuborildi" xabari bilan qaytadi
+    }
+    </script>
+
+    {% else %}
+    <div class="empty-state">
+        <i class="fas fa-user-slash"></i>
+        <p>Guruhda a'zo topilmadi.</p>
+        <p style="font-size:12px; margin-top:8px;">
+            Sabab: bu Safarlar guruhida (TRIPS_GROUP_ID) ro'yxatdan o'tgan foydalanuvchilardan
+            hech kim a'zo emas, yoki bot guruhda emas/admin emas.
+        </p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

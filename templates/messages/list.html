@@ -1,0 +1,86 @@
+{% extends 'base.html' %}
+{% block title %}Xabarlar{% endblock %}
+{% block page_title %}Xabarlar{% endblock %}
+{% block page_sub %}Foydalanuvchilarga yuborilgan ommaviy xabarlar{% endblock %}
+
+{% block topbar_actions %}
+<button class="btn btn-primary" onclick="openModal('sendMsgModal')"><i class="fas fa-paper-plane"></i> Xabar yuborish</button>
+{% endblock %}
+
+{% block content %}
+<div class="glass-panel">
+    <div class="table-container">
+        <table>
+            <thead><tr><th>Sarlavha</th><th>Kimga</th><th>Yuborildi</th><th>Sana</th><th></th></tr></thead>
+            <tbody>
+                {% for m in messages_list %}
+                <tr>
+                    <td>
+                        <strong>{{ m.title }}</strong><br>
+                        <span style="color:var(--text-secondary); font-size:12px;">{{ m.description|truncatechars:50 }}</span>
+                    </td>
+                    <td>
+                        {% for tag in m.tags %}<span class="badge badge-info">{{ tag }}</span>{% endfor %}
+                    </td>
+                    <td>
+                        <span class="badge badge-success" title="Yetkazilgan foydalanuvchilar">
+                            <i class="fas fa-check"></i> {{ m.success_recipients }} ta yetkazildi
+                        </span>
+                        <div style="color:var(--text-secondary); font-size:11px; margin-top:3px;">
+                            jami {{ m.total_recipients }} tadan
+                        </div>
+                    </td>
+                    <td style="color:var(--text-secondary)">{{ m.created_at|date:"d.m.Y H:i" }}</td>
+                    <td>
+                        <a href="{% url 'message_delete' m.id %}" class="btn btn-danger btn-sm btn-icon" onclick="return confirm('O\'chirilsinmi?')"><i class="fas fa-trash"></i></a>
+                        <a href="{% url 'message_detail' m.id %}" class="btn btn-secondary btn-sm btn-icon" title="Ko'rish">
+                            <i class="fas fa-eye"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5"><div class="empty-state"><i class="fas fa-envelope-open"></i><p>Hozircha xabarlar yuborilmagan</p></div></td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="modal-overlay" id="sendMsgModal">
+    <div class="modal">
+        <div class="modal-header">
+            <div class="modal-title">Xabar yuborish</div>
+            <button class="modal-close" onclick="closeModal('sendMsgModal')">&times;</button>
+        </div>
+        <form method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Sarlavha</label>
+                    <input type="text" name="title" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Xabar matni</label>
+                    <textarea name="description" class="form-control" required></textarea>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Kimga yuborilsin</label>
+                    <select name="tags" class="form-control">
+                        <option value="all">Barchaga</option>
+                        <option value="registered">Ro'yxatdan to'liq o'tganlar</option>
+                        <option value="not_registered">Ro'yxatdan o'tmaganlar</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Fayllar (rasm/video, max 4 ta)</label>
+                    <input type="file" name="files" class="form-control" multiple accept="image/*,video/*">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('sendMsgModal')">Bekor qilish</button>
+                <button type="submit" class="btn btn-primary"><i class="fas fa-paper-plane"></i> Yuborish</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

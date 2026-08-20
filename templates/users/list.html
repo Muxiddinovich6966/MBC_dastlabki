@@ -1,0 +1,131 @@
+{% extends 'base.html' %}
+{% block title %}Foydalanuvchilar{% endblock %}
+{% block page_title %}Foydalanuvchilar{% endblock %}
+{% block page_sub %}Jami {{ total_count }} ta ro'yxatdan o'tgan{% endblock %}
+
+{% block topbar_actions %}
+<form method="get" class="search-box">
+    <i class="fas fa-search"></i>
+    <input type="text" name="search" class="form-control" placeholder="Ism, telefon, username..." value="{{ search }}">
+    {% if trips %}<input type="hidden" name="trips" value="{{ trips }}">{% endif %}
+</form>
+<form method="get" style="display:inline;">
+    {% if search %}<input type="hidden" name="search" value="{{ search }}">{% endif %}
+    <select name="trips" class="form-control" onchange="this.form.submit()" title="Safarlarga yuborish holati">
+        <option value="">Safarlar: hammasi</option>
+        <option value="sent" {% if trips == 'sent' %}selected{% endif %}>Yuborilgan</option>
+        <option value="not_sent" {% if trips == 'not_sent' %}selected{% endif %}>Yuborilmagan</option>
+    </select>
+</form>
+<a href="{% url 'user_manual_add' %}" class="btn btn-primary"><i class="fas fa-user-plus"></i> Qo'lda qo'shish</a>
+<a href="{% url 'users_send_to_trips_start' %}" class="btn btn-secondary">
+    <i class="fas fa-paper-plane"></i> Safarlar guruhiga yuborish
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="glass-panel">
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Foydalanuvchi</th>
+                    <th>Telefon</th>
+                    <th>Soha</th>
+                    <th>Shahar</th>
+                    <th>ID</th>
+                    <th>Obuna</th>
+                    <th>Safarlar</th>
+                    <th>Sana</th>
+                    <th style="text-align:right;">Amallar</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for u in users %}
+                <tr style="cursor:pointer;" onclick="window.location='{% url 'user_detail' u.id %}'">
+                    <td>
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            {% if u.profile.photo %}
+                                <img src="{{ u.profile.photo.url }}" class="avatar-sm">
+                            {% else %}
+                                <div class="avatar-sm">{{ u.profile.name|default:u.tg_username|default:"?"|first|upper }}</div>
+                            {% endif %}
+                            <div>
+                                <div style="font-weight:600;">{{ u.profile.name|default:"—" }} {{ u.profile.surname }}</div>
+                                <div style="color:var(--text-secondary); font-size:11px;">
+                                    {% if u.tg_username %}<i class="fab fa-telegram" style="color:#229ED9;"></i> @{{ u.tg_username }}{% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </td>
+                    <td style="color:var(--text-secondary);">{{ u.tg_phone|default:"—" }}</td>
+                    <td style="color:var(--text-secondary);">{{ u.profile.industry|default:"—" }}</td>
+                    <td style="color:var(--text-secondary);">{{ u.profile.work_location|default:"—" }}</td>
+                    <td>
+                        {% if u.unique_id %}
+                            <span class="badge badge-info" style="font-size:12px; font-weight:800; letter-spacing:1px;">{{ u.unique_id }}</span>
+                        {% else %}
+                            <span style="color:var(--text-muted);">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if u.subscription_status == 'active' %}
+                            <span class="badge badge-success" title="Obuna {{ u.active_plan.end_date|date:'d.m.Y' }} gacha"><i class="fas fa-check-circle"></i> Faol</span>
+                        {% elif u.subscription_status == 'expired' %}
+                            <span class="badge badge-danger" title="Obuna muddati tugagan"><i class="fas fa-times-circle"></i> Tugagan</span>
+                        {% else %}
+                            <span style="color:var(--text-muted);">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if u.profile.sent_to_trips_at %}
+                            <span class="badge badge-success" title="{{ u.profile.sent_to_trips_at|date:'d.m.Y H:i' }}"><i class="fas fa-check"></i> Yuborilgan</span>
+                        {% else %}
+                            <span style="color:var(--text-muted);">—</span>
+                        {% endif %}
+                    </td>
+                    <td style="color:var(--text-muted); font-size:12px;">{{ u.created_at|date:"d.m.Y" }}</td>
+                    <td onclick="event.stopPropagation();">
+                        <div style="display:flex; gap:5px; justify-content:flex-end;">
+                            <a href="{% url 'user_detail' u.id %}" class="btn btn-secondary btn-sm btn-icon" title="Ko'rish"><i class="fas fa-eye"></i></a>
+                            <a href="{% url 'user_delete' u.id %}" class="btn btn-danger btn-sm btn-icon" title="O'chirish"
+                               onclick="return confirm('Rostdan o\'chirilsinmi?')"><i class="fas fa-trash"></i></a>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <i class="fas fa-user-slash"></i>
+                            <p>{% if search %}Qidiruv bo'yicha natija topilmadi{% else %}Hozircha foydalanuvchilar yo'q{% endif %}</p>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-top:20px; padding-top:18px; border-top:1px solid var(--border);">
+        <span style="color:var(--text-secondary); font-size:13px;">
+            <strong style="color:var(--text-primary);">{{ page_obj.number }}</strong> / {{ page_obj.paginator.num_pages }} sahifa
+            &nbsp;·&nbsp; <strong style="color:var(--text-primary);">{{ total_count }}</strong> ta jami
+        </span>
+        <div style="display:flex; gap:8px;">
+            {% if page_obj.has_previous %}
+            <a href="?{% if search %}search={{ search }}&{% endif %}{% if trips %}trips={{ trips }}&{% endif %}page={{ page_obj.previous_page_number }}" class="btn btn-secondary btn-sm">
+                <i class="fas fa-chevron-left"></i> Oldingi
+            </a>
+            {% endif %}
+            {% if page_obj.has_next %}
+            <a href="?{% if search %}search={{ search }}&{% endif %}{% if trips %}trips={{ trips }}&{% endif %}page={{ page_obj.next_page_number }}" class="btn btn-secondary btn-sm">
+                Keyingi <i class="fas fa-chevron-right"></i>
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

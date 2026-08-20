@@ -1,0 +1,44 @@
+{% extends 'base.html' %}
+{% block title %}{{ work_event.name }}{% endblock %}
+{% block page_title %}{{ work_event.name }}{% endblock %}
+{% block page_sub %}{{ work_event.event_date }} — vazifalar holati{% endblock %}
+
+{% block topbar_actions %}
+{% if request.GET.from == 'calendar' %}
+<a href="{% url 'calendar' %}" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> Kalendarga</a>
+{% else %}
+<a href="{% url 'work_events_list' %}" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> Orqaga</a>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="glass-panel">
+    <div class="table-container">
+        <table>
+            <thead><tr><th>Vazifa</th><th>Ishchi</th><th>Deadline</th><th>Holati</th></tr></thead>
+            <tbody>
+                {% for t in tasks %}
+                <tr>
+                    <td>
+                        <strong>{{ t.description }}</strong>
+                        {% if t.instruction %}<br><span style="color:var(--text-secondary); font-size:12px;">{{ t.instruction|truncatechars:60 }}</span>{% endif %}
+                    </td>
+                    <td>{% if t.worker %}{{ t.worker.name }}{% else %}<span style="color:var(--text-secondary)">Belgilanmagan</span>{% endif %}</td>
+                    <td>
+                        {{ t.deadline_date }}
+                        {% if t.hours_before %}<br><span style="color:var(--text-secondary); font-size:12px;">{{ t.hours_before }} soat oldin</span>{% endif %}
+                    </td>
+                    <td>
+                        {% if t.status == 'completed' %}<span class="badge badge-success">Bajarildi</span>
+                        {% elif t.status == 'overdue' %}<span class="badge badge-danger">Kechikdi</span>
+                        {% else %}<span class="badge badge-warning">Kutilmoqda</span>{% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="4"><div class="empty-state"><i class="fas fa-tasks"></i><p>Bu tadbirda hali vazifalar yo'q</p></div></td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

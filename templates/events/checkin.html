@@ -1,0 +1,150 @@
+{% extends 'base.html' %}
+{% block title %}Check-in — {{ event.name }}{% endblock %}
+{% block page_title %}Tadbirga kirish nazorati{% endblock %}
+{% block page_sub %}{{ event.name }} — {{ event.date }}{% endblock %}
+
+{% block topbar_actions %}
+<a href="{% url 'events_list' %}" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> Orqaga</a>
+{% endblock %}
+
+{% block content %}
+<div class="two-col">
+    <!-- Chap: skaner va ID kiritish -->
+    <div class="glass-panel">
+        <h3 style="margin-bottom:20px; font-weight:600;"><i class="fas fa-qrcode" style="color:var(--accent)"></i> Skanerlash / ID kiritish</h3>
+
+        {% if result %}
+        <div class="alert alert-{{ result.status }}">
+            <i class="fas fa-{% if result.status == 'success' %}check-circle{% elif result.status == 'warning' %}exclamation-triangle{% else %}times-circle{% endif %}"></i>
+            {{ result.message }}
+        </div>
+        {% endif %}
+
+        <!-- QR skaner kamera -->
+        <div id="reader" style="width:100%; border-radius:10px; overflow:hidden; margin-bottom:16px;"></div>
+        <button type="button" id="startBtn" class="btn btn-secondary" style="width:100%; justify-content:center; margin-bottom:20px;">
+            <i class="fas fa-camera"></i> Kamerani yoqish
+        </button>
+
+        <!-- Qo'lda ID kiritish -->
+        <form method="post" id="codeForm">
+            {% csrf_token %}
+            <label class="form-label">4 xonali ID ni kiriting</label>
+            <div style="display:flex; gap:10px;">
+                <input type="text" name="code" id="codeInput" class="form-control" placeholder="0042" maxlength="4" autofocus>
+                <button type="submit" class="btn btn-primary"><i class="fas fa-check"></i> Tasdiqlash</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- O'ng: kelganlar ro'yxati -->
+    <div class="glass-panel">
+        <h3 style="margin-bottom:20px; font-weight:600;"><i class="fas fa-user-check" style="color:var(--success)"></i> Kelganlar — {{ attended.count }} ta</h3>
+        <div class="table-container">
+            <table>
+                <thead><tr><th>Ism</th><th>ID</th></tr></thead>
+                <tbody>
+                    {% for ue in attended %}
+                    <tr>
+                        <td>{{ ue.user.profile.name|default:ue.user.tg_username }} {{ ue.user.profile.surname }}</td>
+                        <td><span class="badge badge-success">{{ ue.user.unique_id }}</span></td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="2"><div class="empty-state"><i class="fas fa-user-clock"></i><p>Hali hech kim kelmadi</p></div></td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Ledlar: ro'yxatdan o'tmagan mehmonlar -->
+<div class="glass-panel" style="margin-top:24px;">
+    <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:20px;">
+        <h3 style="font-weight:600;">
+            <i class="fas fa-user-plus" style="color:var(--accent)"></i> Ledlar uchun
+            <span style="font-size:13px; font-weight:400; color:var(--text-secondary);">— ro'yxatdan o'tmagan mehmon</span>
+        </h3>
+        <a href="{% url 'leads_list' %}" class="btn btn-secondary"><i class="fas fa-list"></i> Barcha ledlar</a>
+    </div>
+
+    <p style="font-size:13px; color:var(--text-secondary); margin-bottom:16px;">
+        Agar kelgan odam tizimda ro'yxatdan o'tmagan bo'lsa (ID/QR yo'q), uning ism-familiyasi va telefon raqamini shu yerga kiriting.
+        Ma'lumot <b>{{ event.name }}</b> tadbiriga bog'lab saqlanadi.
+    </p>
+
+    <form method="post" class="lead-form">
+        {% csrf_token %}
+        <div>
+            <label class="form-label">Ism familiya</label>
+            <input type="text" name="lead_full_name" class="form-control" placeholder="Ali Valiyev" required>
+        </div>
+        <div>
+            <label class="form-label">Telefon raqam</label>
+            <input type="text" name="lead_phone" class="form-control" placeholder="90 123 45 67" inputmode="tel" required>
+        </div>
+        <button type="submit" class="btn btn-primary"><i class="fas fa-plus"></i> Qo'shish</button>
+        <small class="lead-hint"><i class="fas fa-info-circle"></i> Telefon raqamga <b>+998</b> avtomatik qo'shiladi</small>
+    </form>
+
+    <div class="table-container" style="margin-top:24px;">
+        <h4 style="font-weight:600; margin-bottom:12px; font-size:15px;">
+            <i class="fas fa-users" style="color:var(--text-secondary)"></i> Shu tadbir ledlari — {{ leads.count }} ta
+        </h4>
+        <table>
+            <thead><tr><th>Ism familiya</th><th>Telefon</th><th>Qo'shilgan</th><th></th></tr></thead>
+            <tbody>
+                {% for lead in leads %}
+                <tr>
+                    <td>{{ lead.full_name }}</td>
+                    <td>{{ lead.phone }}</td>
+                    <td style="color:var(--text-secondary); font-size:13px;">{{ lead.created_at|date:"d.m.Y H:i" }}</td>
+                    <td style="text-align:right;">
+                        <form method="post" action="{% url 'lead_delete' lead.id %}" onsubmit="return confirm('Leadni o\'chirasizmi?');" style="display:inline;">
+                            {% csrf_token %}
+                            <input type="hidden" name="next" value="checkin">
+                            <button type="submit" class="btn btn-secondary" style="padding:4px 10px; color:#f87171;"><i class="fas fa-trash"></i></button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="4"><div class="empty-state"><i class="fas fa-user-plus"></i><p>Hali lead qo'shilmagan</p></div></td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script>
+    const startBtn = document.getElementById('startBtn');
+    let html5QrCode = null;
+
+    startBtn.addEventListener('click', function() {
+        if (html5QrCode) {
+            html5QrCode.stop();
+            html5QrCode = null;
+            startBtn.innerHTML = '<i class="fas fa-camera"></i> Kamerani yoqish';
+            return;
+        }
+        html5QrCode = new Html5Qrcode("reader");
+        html5QrCode.start(
+            { facingMode: "environment" },
+            { fps: 10, qrbox: 220 },
+            function(decodedText) {
+                // QR ichidagi matnni ID kiritish maydoniga qo'yib, formani yuboramiz
+                document.getElementById('codeInput').value = decodedText.trim();
+                html5QrCode.stop();
+                document.getElementById('codeForm').submit();
+            }
+        ).then(function() {
+            startBtn.innerHTML = '<i class="fas fa-stop"></i> Kamerani o\'chirish';
+        }).catch(function(err) {
+            alert("Kamerani ochib bo'lmadi: " + err);
+            html5QrCode = null;
+        });
+    });
+</script>
+{% endblock %}

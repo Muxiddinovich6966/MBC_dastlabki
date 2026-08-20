@@ -1,0 +1,58 @@
+{% extends 'base.html' %}
+{% block title %}Shablonlar{% endblock %}
+{% block page_title %}Shablonlar{% endblock %}
+{% block page_sub %}Tadbir uchun tayyor vazifalar to'plami — jami {{ templates.count }} ta{% endblock %}
+
+{% block topbar_actions %}
+<a href="{% url 'workers_list' %}" class="btn btn-secondary"><i class="fas fa-user-tie"></i> Ishchilar</a>
+<button class="btn btn-primary" onclick="openModal('addTemplateModal')"><i class="fas fa-plus"></i> Shablon qo'shish</button>
+{% endblock %}
+
+{% block content %}
+<div class="glass-panel">
+    <div class="table-container">
+        <table>
+            <thead><tr><th>Shablon nomi</th><th>Vazifalar soni</th><th></th></tr></thead>
+            <tbody>
+                {% for t in templates %}
+                <tr>
+                    <td><strong>{{ t.name }}</strong></td>
+                    <td><span class="badge badge-info">{{ t.tasks.count }} ta</span></td>
+                    <td>
+                        <div style="display:flex; gap:6px;">
+                            <a href="{% url 'template_detail' t.id %}" class="btn btn-secondary btn-sm btn-icon" title="Vazifalarni ko'rish"><i class="fas fa-eye"></i></a>
+                            <a href="{% url 'template_edit' t.id %}" class="btn btn-secondary btn-sm btn-icon" title="Tahrirlash"><i class="fas fa-edit"></i></a>
+                            <a href="{% url 'template_delete' t.id %}" class="btn btn-danger btn-sm btn-icon" onclick="return confirm('O\'chirilsinmi? Ichidagi barcha vazifalar ham o\'chadi!')"><i class="fas fa-trash"></i></a>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="3"><div class="empty-state"><i class="fas fa-copy"></i><p>Hozircha shablonlar yo'q</p></div></td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="modal-overlay" id="addTemplateModal">
+    <div class="modal">
+        <div class="modal-header">
+            <div class="modal-title">Shablon qo'shish</div>
+            <button class="modal-close" onclick="closeModal('addTemplateModal')">&times;</button>
+        </div>
+        <form method="post">
+            {% csrf_token %}
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Shablon nomi</label>
+                    <input type="text" name="name" class="form-control" placeholder="Masalan: Konferensiya shabloni" required>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('addTemplateModal')">Bekor qilish</button>
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Saqlash</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

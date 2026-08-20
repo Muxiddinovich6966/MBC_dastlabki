@@ -1,0 +1,41 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kirish | MBC Platform</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+</head>
+<body>
+    <div class="login-container">
+        <div class="glass-panel login-box animate-fade-in">
+            <h2 class="login-title">
+                <i class="fas fa-cubes brand-accent"></i>
+                <span class="brand-accent">MBC</span> Platform
+            </h2>
+            <form method="post">
+                {% csrf_token %}
+                {% if error %}
+                <div class="login-error">
+                    <i class="fas fa-exclamation-circle"></i> {{ error }}
+                </div>
+                {% endif %}
+                <div class="form-group">
+                    <label class="form-label">Login</label>
+                    <input type="text" name="username" class="form-control" placeholder="Loginingizni kiriting" required autofocus>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Parol</label>
+                    <input type="password" name="password" class="form-control" placeholder="Parolingizni kiriting" required>
+                </div>
+                <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; padding:13px;">
+                    <i class="fas fa-sign-in-alt"></i> Kirish
+                </button>
+            </form>
+        </div>
+    </div>
+</body>
+</html>

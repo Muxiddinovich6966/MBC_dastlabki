@@ -1,0 +1,117 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}{{ event.name }}{% endblock %}
+{% block page_title %}{{ event.name }}{% endblock %}
+{% block page_sub %}{{ event.date }} — {{ event.location }}{% endblock %}
+
+{% block extra_head %}
+{% if event.latitude and event.longitude %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+{% endif %}
+{% endblock %}
+
+{% block topbar_actions %}
+{% if request.GET.from == 'calendar' %}
+<a href="{% url 'calendar' %}" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> Kalendarga</a>
+{% else %}
+<a href="{% url 'events_list' %}" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> Orqaga</a>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="glass-panel" style="margin-bottom:24px;">
+    <p style="color:var(--text-secondary); margin-bottom:16px;">{{ event.description }}</p>
+    <div style="display:flex; gap:24px; flex-wrap:wrap;">
+        <div><span style="color:var(--text-secondary); font-size:12px;">SPEAKER</span><br><strong>{{ event.speaker|default:"—" }}</strong></div>
+        <div><span style="color:var(--text-secondary); font-size:12px;">VAQT</span><br><strong>{{ event.time }}</strong></div>
+        <div><span style="color:var(--text-secondary); font-size:12px;">KATEGORIYA</span><br><strong>{{ event.get_category_display }}</strong></div>
+    </div>
+</div>
+
+<!-- RSVP statistika kartalari -->
+<div style="display:flex; gap:16px; flex-wrap:wrap; margin-bottom:24px;">
+    <div class="glass-panel" style="flex:1; min-width:140px; text-align:center; padding:16px;">
+        <div style="font-size:28px; font-weight:700; color:#22c55e;">{{ counts.boraman }}</div>
+        <div style="font-size:13px; color:var(--text-secondary);">✅ Boraman</div>
+    </div>
+    <div class="glass-panel" style="flex:1; min-width:140px; text-align:center; padding:16px;">
+        <div style="font-size:28px; font-weight:700; color:#3b82f6;">{{ counts.balki_borarman }}</div>
+        <div style="font-size:13px; color:var(--text-secondary);">🤔 Balki borarman</div>
+    </div>
+    <div class="glass-panel" style="flex:1; min-width:140px; text-align:center; padding:16px;">
+        <div style="font-size:28px; font-weight:700; color:#f59e0b;">{{ counts.balki_bormasman }}</div>
+        <div style="font-size:13px; color:var(--text-secondary);">😐 Balki bormasman</div>
+    </div>
+    <div class="glass-panel" style="flex:1; min-width:140px; text-align:center; padding:16px;">
+        <div style="font-size:28px; font-weight:700; color:#ef4444;">{{ counts.bormayman }}</div>
+        <div style="font-size:13px; color:var(--text-secondary);">❌ Bormayman</div>
+    </div>
+</div>
+
+{% if event.latitude and event.longitude %}
+<div class="glass-panel" style="margin-bottom:24px;">
+    <h3 style="margin-bottom:12px; font-weight:600;"><i class="fas fa-map-marker-alt" style="color:#ef4444"></i> Manzil xaritada</h3>
+    <div id="event-map" style="height:260px; border-radius:10px; overflow:hidden;"></div>
+    <p style="margin-top:8px; color:var(--text-secondary); font-size:13px;">
+        <i class="fas fa-location-dot"></i> {{ event.location }}
+        &nbsp;—&nbsp;
+        <a href="https://maps.google.com/?q={{ event.latitude }},{{ event.longitude }}" target="_blank" style="color:var(--accent);">
+            Google Maps da ko'rish
+        </a>
+    </p>
+</div>
+{% endif %}
+
+{% if event.telegraph_url %}
+<div class="glass-panel" style="margin-bottom:24px; display:flex; align-items:center; gap:12px;">
+    <i class="fas fa-chart-bar" style="color:var(--accent);"></i>
+    <span>Jonli ovozlar sahifasi:</span>
+    <a href="{{ event.telegraph_url }}" target="_blank" style="color:var(--accent); font-weight:600;">
+        👥 Telegraph orqali ko'rish
+    </a>
+</div>
+{% endif %}
+
+{% if has_delivery %}
+{% include 'events/_delivery.html' %}
+<div style="height:24px;"></div>
+{% endif %}
+
+<div class="glass-panel">
+    <h3 style="margin-bottom:20px; font-weight:600;">Javob berganlar — {{ responses.count }} ta</h3>
+    <div class="table-container">
+        <table>
+            <thead><tr><th>Foydalanuvchi</th><th>Javobi</th><th>Tadbirga keldi</th></tr></thead>
+            <tbody>
+                {% for r in responses %}
+                <tr>
+                    <td>{{ r.user.profile.name|default:r.user.tg_username }} {{ r.user.profile.surname }}</td>
+                    <td>
+                        {% if r.rsvp_choice == 'boraman' %}<span class="badge badge-success">✅ Boraman</span>
+                        {% elif r.rsvp_choice == 'balki_borarman' %}<span class="badge badge-info">🤔 Balki borarman</span>
+                        {% elif r.rsvp_choice == 'balki_bormasman' %}<span class="badge badge-warning">😐 Balki bormasman</span>
+                        {% elif r.rsvp_choice == 'bormayman' %}<span class="badge badge-danger">❌ Bormayman</span>
+                        {% else %}<span class="badge badge-warning">Javob yo'q</span>{% endif %}
+                    </td>
+                    <td>{% if r.is_attendance %}<i class="fas fa-check" style="color:var(--success)"></i>{% else %}—{% endif %}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="3"><div class="empty-state"><i class="fas fa-inbox"></i><p>Hali hech kim javob bermagan</p></div></td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if event.latitude and event.longitude %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+var map = L.map('event-map').setView([{{ event.latitude }}, {{ event.longitude }}], 15);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {attribution:'© OpenStreetMap'}).addTo(map);
+L.marker([{{ event.latitude }}, {{ event.longitude }}]).addTo(map)
+    .bindPopup("{{ event.location }}").openPopup();
+</script>
+{% endif %}
+{% endblock %}

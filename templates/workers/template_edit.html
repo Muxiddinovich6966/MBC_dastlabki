@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+{% block title %}Shablonni tahrirlash{% endblock %}
+{% block page_title %}Shablonni tahrirlash{% endblock %}
+{% block page_sub %}{{ template.name }}{% endblock %}
+
+{% block topbar_actions %}
+<a href="{% url 'templates_list' %}" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> Orqaga</a>
+{% endblock %}
+
+{% block content %}
+<div class="glass-panel">
+    <form method="post">
+        {% csrf_token %}
+        <div class="form-group">
+            <label class="form-label">Shablon nomi</label>
+            <input type="text" name="name" class="form-control" value="{{ template.name }}" required>
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
+            <a href="{% url 'templates_list' %}" class="btn btn-secondary">Bekor qilish</a>
+            <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Saqlash</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

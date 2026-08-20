@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+{% block title %}Manzillar{% endblock %}
+{% block page_title %}Manzillar{% endblock %}
+{% block page_sub %}Doimiy joylar — tadbir yaratishda tanlash uchun. Jami {{ venues.count }} ta{% endblock %}
+
+{% block topbar_actions %}
+<a href="{% url 'events_list' %}" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> Tadbirlar</a>
+<button class="btn btn-primary" onclick="openModal('addVenueModal')"><i class="fas fa-plus"></i> Manzil qo'shish</button>
+{% endblock %}
+
+{% block content %}
+<div class="glass-panel">
+    <div class="table-container">
+        <table>
+            <thead><tr><th>Nomi</th><th>To'liq manzil</th><th>Koordinata</th><th></th></tr></thead>
+            <tbody>
+                {% for v in venues %}
+                <tr>
+                    <td>
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <div class="avatar-sm"><i class="fas fa-map-marker-alt" style="font-size:13px;"></i></div>
+                            <strong>{{ v.name }}</strong>
+                        </div>
+                    </td>
+                    <td style="color:var(--text-secondary)">{{ v.address|default:"—" }}</td>
+                    <td>
+                        {% if v.latitude and v.longitude %}
+                        <span class="badge badge-info">{{ v.latitude }}, {{ v.longitude }}</span>
+                        {% else %}
+                        <span class="badge badge-warning">Yo'q</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a href="{% url 'venue_delete' v.id %}" class="btn btn-danger btn-sm btn-icon" onclick="return confirm('O\'chirilsinmi?')"><i class="fas fa-trash"></i></a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="4"><div class="empty-state"><i class="fas fa-map-marked-alt"></i><p>Hozircha manzillar yo'q</p></div></td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="modal-overlay" id="addVenueModal">
+    <div class="modal">
+        <div class="modal-header">
+            <div class="modal-title">Manzil qo'shish</div>
+            <button class="modal-close" onclick="closeModal('addVenueModal')">&times;</button>
+        </div>
+        <form method="post">
+            {% csrf_token %}
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Joy nomi</label>
+                    <input type="text" name="name" class="form-control" placeholder="Masalan: Centris Tower" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">To'liq manzil</label>
+                    <input type="text" name="address" class="form-control" placeholder="Toshkent, Amir Temur ko'chasi 107B">
+                </div>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label class="form-label">Latitude</label>
+                        <input type="text" name="latitude" class="form-control" placeholder="41.311081">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Longitude</label>
+                        <input type="text" name="longitude" class="form-control" placeholder="69.279716">
+                    </div>
+                </div>
+                <small style="color:var(--text-secondary); font-size:12px;">Koordinatani Google Maps yoki Yandex Maps'dan oling (joyga o'ng tugma bosing)</small>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('addVenueModal')">Bekor qilish</button>
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Saqlash</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

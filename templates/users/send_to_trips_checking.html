@@ -1,0 +1,23 @@
+{% extends 'base.html' %}
+{% block title %}Tekshirilmoqda{% endblock %}
+{% block page_title %}Safarlar guruhiga yuborish{% endblock %}
+{% block page_sub %}Guruh a'zolari tekshirilmoqda{% endblock %}
+
+{% block content %}
+<div class="glass-panel" style="text-align:center; padding:48px 24px;">
+    <i class="fas fa-spinner fa-spin" style="font-size:40px; color:var(--accent);"></i>
+    <div style="margin-top:18px; font-size:18px; font-weight:600;">Guruh a'zolari tekshirilmoqda...</div>
+    <div style="margin-top:8px; font-size:13px; color:var(--text-secondary);">
+        Har bir foydalanuvchi Safarlar guruhida a'zomi — Telegram orqali tekshirilyapti.<br>
+        Biroz kuting, sahifa o'zi ochiladi.
+    </div>
+</div>
+
+<script>
+    // Sahifa chizilgach — a'zolarni tekshiruvchi (sekin) sahifaga o'tamiz.
+    // Kutish paytida ushbu "Tekshirilmoqda" sahifasi ko'rinib turadi.
+    setTimeout(function () {
+        window.location.href = "{% url 'users_send_to_trips_bulk' %}";
+    }, 80);
+</script>
+{% endblock %}

@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+{% block title %}Safarlar guruhiga yuborish{% endblock %}
+{% block page_title %}Tasdiqlash{% endblock %}
+{% block page_sub %}Foydalanuvchi guruh a'zosi emas{% endblock %}
+
+{% block topbar_actions %}
+<a href="{% url 'user_detail' user_obj.id %}" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> Orqaga</a>
+{% endblock %}
+
+{% block content %}
+<div class="glass-panel" style="max-width:560px;">
+    <div class="alert alert-warning">
+        <i class="fas fa-exclamation-triangle"></i>
+        <span><b>Ogohlantirish:</b> Foydalanuvchi (<strong>{{ profile.name }} {{ profile.surname }}</strong>) «Safarlar» guruhiga a'zo emas.</span>
+    </div>
+
+    <p style="margin:16px 0; font-size:15px;">Yuborishni tasdiqlaysizmi?</p>
+
+    <form method="post" style="display:flex; gap:10px; justify-content:flex-end;">
+        {% csrf_token %}
+        <input type="hidden" name="confirmed" value="1">
+        <a href="{% url 'user_detail' user_obj.id %}" class="btn btn-secondary">Bekor qilish</a>
+        <button type="submit" class="btn btn-primary"
+                onclick="var b=this; setTimeout(function(){b.innerHTML='<i class=\'fas fa-spinner fa-spin\'></i> Yuborilmoqda...'; b.disabled=true;}, 10);">
+            <i class="fas fa-paper-plane"></i> Yuborish
+        </button>
+    </form>
+</div>
+{% endblock %}

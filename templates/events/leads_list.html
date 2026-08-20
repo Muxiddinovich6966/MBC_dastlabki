@@ -1,0 +1,168 @@
+{% extends 'base.html' %}
+{% block title %}Ledlar{% endblock %}
+{% block page_title %}Ledlar{% endblock %}
+{% block page_sub %}Ro'yxatdan o'tmagan mehmonlar — tadbirlarga kelganlar. Jami {{ leads.count }} ta{% endblock %}
+
+{% block topbar_actions %}
+<a href="{% url 'events_list' %}" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> Tadbirlar</a>
+{% endblock %}
+
+{% block content %}
+<div class="glass-panel">
+    <!-- Filtrlar -->
+    <form method="get" style="display:flex; align-items:end; gap:12px; margin-bottom:20px; flex-wrap:wrap;">
+        <div style="min-width:240px;">
+            <label class="form-label">Tadbir bo'yicha filtr</label>
+            <select name="event" class="form-control" onchange="this.form.submit()">
+                <option value="">— Barcha tadbirlar —</option>
+                {% for e in events %}
+                <option value="{{ e.id }}" {% if selected_event_id == e.id|stringformat:'s' %}selected{% endif %}>{{ e.name }} ({{ e.date }})</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div style="min-width:200px;">
+            <label class="form-label">Holat bo'yicha filtr</label>
+            <select name="status" class="form-control" onchange="this.form.submit()">
+                <option value="">— Barcha holatlar —</option>
+                {% for val, label in status_choices %}
+                <option value="{{ val }}" {% if selected_status == val %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        {% if selected_event_id or selected_status %}
+        <a href="{% url 'leads_list' %}" class="btn btn-secondary"><i class="fas fa-times"></i> Tozalash</a>
+        {% endif %}
+    </form>
+
+    <div class="table-container">
+        <table>
+            <thead><tr><th>Ism familiya</th><th>Telefon</th><th>Tadbir</th><th>Holat</th><th>Qo'shilgan</th><th></th></tr></thead>
+            <tbody>
+                {% for lead in leads %}
+                <tr>
+                    <td>
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <div class="avatar-sm"><i class="fas fa-user" style="font-size:13px;"></i></div>
+                            <strong>{{ lead.full_name }}</strong>
+                        </div>
+                    </td>
+                    <td>
+                        <a href="tel:{{ lead.phone }}" style="color:var(--accent); text-decoration:none;">
+                            <i class="fas fa-phone" style="font-size:11px;"></i> {{ lead.phone }}
+                        </a>
+                    </td>
+                    <td>
+                        <a href="{% url 'event_detail' lead.event.id %}" class="badge badge-info" style="text-decoration:none;">{{ lead.event.name }}</a>
+                    </td>
+                    <td>
+                        <span class="badge {{ lead.status_badge_class }}">{{ lead.get_status_display }}</span>
+                        {% if lead.status_changed_at %}
+                        <div style="color:var(--text-muted); font-size:11px; margin-top:2px;">{{ lead.status_changed_at|date:"d.m.Y H:i" }}</div>
+                        {% endif %}
+                    </td>
+                    <td style="color:var(--text-secondary); font-size:13px;">{{ lead.created_at|date:"d.m.Y H:i" }}</td>
+                    <td style="text-align:right; white-space:nowrap;">
+                        <button type="button" class="btn btn-secondary btn-sm btn-icon" title="Holat / tarix"
+                                onclick="toggleLeadDetail({{ lead.id }})"><i class="fas fa-clock-rotate-left"></i></button>
+                        <button type="button" class="btn btn-secondary btn-sm btn-icon" title="Tahrirlash"
+                                data-edit-url="{% url 'lead_edit' lead.id %}"
+                                data-name="{{ lead.full_name }}" data-phone="{{ lead.phone }}" data-note="{{ lead.note }}"
+                                onclick="openEditLead(this)"><i class="fas fa-pen"></i></button>
+                        <form method="post" action="{% url 'lead_delete' lead.id %}" onsubmit="return confirm('Leadni o\'chirasizmi?');" style="display:inline;">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-danger btn-sm btn-icon" title="O'chirish"><i class="fas fa-trash"></i></button>
+                        </form>
+                    </td>
+                </tr>
+                <!-- Holat o'zgartirish + tarix (yashirin, tugma bilan ochiladi) -->
+                <tr class="lead-detail" id="lead-detail-{{ lead.id }}" style="display:none;">
+                    <td colspan="6" style="background:rgba(0,0,0,0.15);">
+                        <div style="display:flex; gap:28px; flex-wrap:wrap; padding:8px 4px;">
+                            <!-- Holatni o'zgartirish -->
+                            <form method="post" action="{% url 'lead_change_status' lead.id %}" style="min-width:260px;">
+                                {% csrf_token %}
+                                <label class="form-label">Holatni o'zgartirish</label>
+                                <select name="status" class="form-control">
+                                    {% for val, label in status_choices %}
+                                    <option value="{{ val }}" {% if val == lead.status %}selected{% endif %}>{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                                <input type="text" name="note" class="form-control" placeholder="Izoh (ixtiyoriy)" style="margin-top:8px;">
+                                <button type="submit" class="btn btn-primary btn-sm" style="margin-top:10px;"><i class="fas fa-save"></i> Saqlash</button>
+                            </form>
+                            <!-- Holat tarixi -->
+                            <div style="flex:1; min-width:300px;">
+                                <label class="form-label"><i class="fas fa-history"></i> Holat tarixi</label>
+                                {% for logrec in lead.status_logs.all %}
+                                <div style="font-size:13px; padding:7px 0; border-bottom:1px solid var(--border);">
+                                    <span style="color:var(--text-muted);">{{ logrec.created_at|date:"d.m.Y H:i" }}</span>
+                                    &nbsp;·&nbsp;
+                                    <span style="color:var(--text-secondary);">{{ logrec.get_old_status_display }}</span>
+                                    <i class="fas fa-arrow-right" style="font-size:10px; color:var(--text-muted);"></i>
+                                    <strong>{{ logrec.get_new_status_display }}</strong>
+                                    {% if logrec.changed_by %}<span style="color:var(--text-muted);">— {{ logrec.changed_by }}</span>{% endif %}
+                                    {% if logrec.note %}<div style="color:var(--text-muted); margin-top:2px;">💬 {{ logrec.note }}</div>{% endif %}
+                                </div>
+                                {% empty %}
+                                <p style="color:var(--text-secondary); font-size:13px;">Hali o'zgarish bo'lmagan (boshlang'ich holat: Yangi).</p>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="6"><div class="empty-state"><i class="fas fa-user-plus"></i><p>Hozircha ledlar yo'q. Tadbir check-in sahifasidan qo'shishingiz mumkin.</p></div></td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Leadni tahrirlash modali -->
+<div class="modal-overlay" id="editLeadModal">
+    <div class="modal">
+        <div class="modal-header">
+            <div class="modal-title">Leadni tahrirlash</div>
+            <button class="modal-close" onclick="closeModal('editLeadModal')">&times;</button>
+        </div>
+        <form method="post" id="editLeadForm">
+            {% csrf_token %}
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Ism familiya</label>
+                    <input type="text" name="full_name" id="editLeadName" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Telefon raqam</label>
+                    <input type="text" name="phone" id="editLeadPhone" class="form-control" placeholder="90 123 45 67" inputmode="tel" required>
+                    <small style="color:var(--text-secondary); font-size:12px;">+998 avtomatik qo'shiladi</small>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Izoh (ixtiyoriy)</label>
+                    <input type="text" name="note" id="editLeadNote" class="form-control">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('editLeadModal')">Bekor qilish</button>
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Saqlash</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function openEditLead(btn) {
+    document.getElementById('editLeadForm').action = btn.dataset.editUrl;
+    document.getElementById('editLeadName').value = btn.dataset.name || '';
+    document.getElementById('editLeadPhone').value = btn.dataset.phone || '';
+    document.getElementById('editLeadNote').value = btn.dataset.note || '';
+    openModal('editLeadModal');
+}
+function toggleLeadDetail(id) {
+    var el = document.getElementById('lead-detail-' + id);
+    el.style.display = (el.style.display === 'none' || !el.style.display) ? 'table-row' : 'none';
+}
+</script>
+{% endblock %}

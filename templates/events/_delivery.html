@@ -1,0 +1,85 @@
+{% comment %}
+Tadbir yuborish tarixi — qaysi guruh/foydalanuvchiga ketgan/ketmagan.
+Kontekst: group_delivery, user_logs, user_sent, user_failed (views._event_delivery_context).
+{% endcomment %}
+<style>
+.deliv-chip {
+    display:inline-flex; align-items:center; gap:6px; padding:6px 12px;
+    border-radius:20px; font-size:12.5px; font-weight:500; margin:0 4px 6px 0;
+}
+.deliv-sent { background:rgba(34,197,94,0.14); color:#22c55e; }
+.deliv-fail { background:rgba(239,68,68,0.14); color:#ef4444; }
+.deliv-stat { display:flex; gap:14px; flex-wrap:wrap; margin-bottom:14px; }
+.deliv-stat .num { font-size:22px; font-weight:700; }
+</style>
+
+<div class="glass-panel" style="margin-top:24px;">
+    <h3 style="margin-bottom:16px; font-weight:600;">
+        <i class="fas fa-paper-plane" style="color:var(--accent);"></i> Yuborish tarixi
+    </h3>
+
+    <!-- Guruhlar -->
+    <div style="margin-bottom:18px;">
+        <div style="color:var(--text-secondary); font-size:12px; text-transform:uppercase; margin-bottom:8px;">
+            Guruhlar
+        </div>
+        {% for gd in group_delivery %}
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+            {% if gd.sent %}
+            <span class="deliv-chip deliv-sent"><i class="fas fa-check"></i> {{ gd.group.title }}</span>
+            {% if show_group_delete %}
+            <a href="{% url 'event_group_message_delete' event.id gd.group.id %}"
+               class="btn btn-danger btn-sm btn-icon"
+               title="Tadbirni shu guruh/kanaldan o'chirish"
+               onclick="return confirm('Tadbir shu guruh/kanaldan o\'chirilsinmi?')">
+                <i class="fas fa-trash"></i>
+            </a>
+            {% endif %}
+            {% else %}
+            <span class="deliv-chip deliv-fail"><i class="fas fa-times"></i> {{ gd.group.title }} — yuborilmadi</span>
+            {% endif %}
+        </div>
+        {% empty %}
+        <span style="color:var(--text-secondary); font-size:13px;">Guruh tanlanmagan.</span>
+        {% endfor %}
+    </div>
+
+    <!-- Foydalanuvchilar -->
+    <div style="color:var(--text-secondary); font-size:12px; text-transform:uppercase; margin-bottom:8px;">
+        Foydalanuvchilar
+    </div>
+    <div class="deliv-stat">
+        <div><span class="num" style="color:#22c55e;">{{ user_sent }}</span>
+            <span style="color:var(--text-secondary); font-size:13px;">yuborildi</span></div>
+        <div><span class="num" style="color:#ef4444;">{{ user_failed }}</span>
+            <span style="color:var(--text-secondary); font-size:13px;">yuborilmadi</span></div>
+    </div>
+
+    {% if user_logs %}
+    <div class="table-container">
+        <table>
+            <thead><tr><th>Foydalanuvchi</th><th>Holati</th><th>Vaqt</th></tr></thead>
+            <tbody>
+                {% for log in user_logs %}
+                <tr>
+                    <td>
+                        {% if log.user %}
+                            {{ log.user.profile.name|default:log.user.tg_username|default:log.user.tg_id }}
+                            {{ log.user.profile.surname|default:'' }}
+                        {% else %}{{ log.chat_id }}{% endif %}
+                    </td>
+                    <td>
+                        {% if log.status == 'success' %}
+                        <span class="badge badge-success"><i class="fas fa-check"></i> Yuborildi</span>
+                        {% else %}
+                        <span class="badge badge-danger"><i class="fas fa-times"></i> Xato</span>
+                        {% endif %}
+                    </td>
+                    <td style="color:var(--text-secondary); font-size:12px;">{{ log.updated_at|date:'d.m.Y H:i' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+</div>

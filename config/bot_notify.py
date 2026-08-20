@@ -1,0 +1,673 @@
+
+
+"""
+Saytdan Telegram API orqali xabar yuborish.
+"""
+import time
+import requests
+from django.conf import settings
+
+
+def send_telegram_message(chat_id, text, parse_mode='HTML'):
+    """Oddiy matnli xabar."""
+    token = settings.CLIENT_BOT_TOKEN
+    if not token:
+        print("CLIENT_BOT_TOKEN yo'q!")
+        return False
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    try:
+        r = requests.post(url, json={
+            'chat_id': chat_id,
+            'text': text,
+            'parse_mode': parse_mode,
+        }, timeout=10)
+        resp = r.json()
+        if not resp.get('ok'):
+            print(f"[BOT XATO] {resp}")
+        return resp.get('ok', False)
+    except Exception as e:
+        print(f"Xatolik: {e}")
+        return False
+
+
+import json
+
+def send_event_message(chat_id, text, event_id, image_url=None, image_path=None, telegraph_url=None,
+                       parse_mode='HTML', is_group=False, bot_username=None):
+    """
+    Tadbir xabarini yuboradi.
+    - Foydalanuvchilarga: 6 ta RSVP tugma
+    - Guruhlarga: Ro'yxatdan o'tish tugmasi
+    """
+    token = settings.CLIENT_BOT_TOKEN
+    if not token:
+        print("CLIENT_BOT_TOKEN yo'q!")
+        return False
+
+    bot_link = f"https://t.me/{bot_username}" if bot_username else "https://t.me/MBC_platforum_bot"
+    t_url = telegraph_url if telegraph_url else "https://telegra.ph/"
+
+    if is_group:
+        # Guruh/kanalga — ovozlarni ko'rish (Telegraph) tugmasi
+        keyboard = {
+            "inline_keyboard": [[
+                {"text": "👥 Ovozlarni ko'rish", "url": t_url},
+            ]]
+        }
+    else:
+        # Foydalanuvchiga — 6 ta tugma
+        keyboard = {
+            "inline_keyboard": [
+                [
+                    {"text": "✅ Boraman",
+                     "callback_data": f"rsvp:boraman:{event_id}"},
+                    {"text": "🤔 Balki borarman",
+                     "callback_data": f"rsvp:balki_borarman:{event_id}"},
+                ],
+                [
+                    {"text": "😐 Balki bormasman",
+                     "callback_data": f"rsvp:balki_bormasman:{event_id}"},
+                    {"text": "❌ Bormayman",
+                     "callback_data": f"rsvp:bormayman:{event_id}"},
+                ],
+                [
+                    {"text": "👥 Ovozlarni ko'rish", "url": t_url},
+                    {"text": "🤖 Ro'yxatdan o'tish", "url": f"{bot_link}?start=register"}
+                ]
+            ]
+        }
+
+    try:
+        import os
+        if image_path and os.path.exists(image_path):
+            url = f"https://api.telegram.org/bot{token}/sendPhoto"
+            payload = {
+                'chat_id': chat_id,
+                'caption': text,
+                'parse_mode': parse_mode,
+                'reply_markup': json.dumps(keyboard),
+            }
+            with open(image_path, 'rb') as f:
+                r = requests.post(url, data=payload, files={'photo': f}, timeout=60)
+        elif image_url:
+            url = f"https://api.telegram.org/bot{token}/sendPhoto"
+            payload = {
+                'chat_id': chat_id,
+                'photo': image_url,
+                'caption': text,
+                'parse_mode': parse_mode,
+                'reply_markup': keyboard,
+            }
+            r = requests.post(url, json=payload, timeout=60)
+        else:
+            url = f"https://api.telegram.org/bot{token}/sendMessage"
+            payload = {
+                'chat_id': chat_id,
+                'text': text,
+                'parse_mode': parse_mode,
+                'reply_markup': keyboard,
+            }
+            r = requests.post(url, json=payload, timeout=60)
+        
+        resp = r.json()
+        if not resp.get('ok'):
+            print(f"[BOT XATO] {resp}")
+            return False
+        # Muvaffaqiyatli — xabar ID sini qaytaramiz (message_id > 0, ya'ni truthy).
+        # Bu keyinchalik tahrirlashda eski xabarni o'chirish uchun kerak.
+        return resp['result']['message_id']
+    except Exception as e:
+        print(f"Xatolik: {e}")
+        return False
+
+
+def check_telegram_connection():
+    """Telegram API ga ulanish bor-yo'qligini bitta getMe so'rovi bilan tekshiradi.
+
+    Qaytadi: (ok, natija) — ok=True bo'lsa bot username; aks holda xato sababi.
+    Ommaviy amallardан oldin ishlatiladi: internet yo'q bo'lsa, 100 ta so'rovни
+    behuda kutmasдан, adminга aniq "internet yo'q" xabarини ko'rsatish uchun.
+    """
+    token = settings.CLIENT_BOT_TOKEN
+    if not token:
+        return False, "CLIENT_BOT_TOKEN yo'q"
+    try:
+        r = requests.get(f"https://api.telegram.org/bot{token}/getMe", timeout=10)
+        resp = r.json()
+        if resp.get('ok'):
+            return True, resp['result'].get('username', '')
+        return False, resp.get('description', 'noma\'lum xato')
+    except Exception:
+        return False, "Telegram API ga ulanib bo'lmadi (internet yoki DNS muammosi)"
+
+
+def get_telegram_chat(chat_id):
+    """Chatni getChat orqali tekshiradi (bot uni ko'ra oladimi).
+
+    Qaytadi: (ok, natija) — ok=True bo'lsa natija chat nomi; aks holda xato matni.
+    Guruh/kanal qo'shishда ID to'g'riligini tekshirish uchun ishlatiladi.
+    """
+    token = settings.CLIENT_BOT_TOKEN
+    if not token:
+        return False, "CLIENT_BOT_TOKEN yo'q"
+    url = f"https://api.telegram.org/bot{token}/getChat"
+    try:
+        r = requests.get(url, params={'chat_id': chat_id}, timeout=10)
+        resp = r.json()
+        if resp.get('ok'):
+            res = resp['result']
+            return True, res.get('title') or res.get('username') or str(chat_id)
+        return False, resp.get('description', 'chat topilmadi')
+    except Exception as e:
+        return False, str(e)
+
+
+def delete_telegram_message(chat_id, message_id):
+    """Yuborilgan tadbir xabarini o'chiradi (tahrirlashda eskisini uchirish uchun)."""
+    token = settings.CLIENT_BOT_TOKEN
+    if not token or not message_id:
+        return False
+    url = f"https://api.telegram.org/bot{token}/deleteMessage"
+    try:
+        r = requests.post(url, json={
+            'chat_id': chat_id,
+            'message_id': message_id,
+        }, timeout=10)
+        return r.json().get('ok', False)
+    except Exception as e:
+        print(f"Xabar o'chirish xatosi ({chat_id}): {e}")
+        return False
+
+
+def delete_worker_bot_message(chat_id, message_id):
+    """Ishchilar boti orqali yuborilgan xabarni o'chiradi (tadbir tahrirlanganda)."""
+    token = settings.WORKER_BOT_TOKEN
+    if not token or not message_id:
+        return False
+    url = f"https://api.telegram.org/bot{token}/deleteMessage"
+    try:
+        r = requests.post(url, json={
+            'chat_id': chat_id,
+            'message_id': message_id,
+        }, timeout=10)
+        return r.json().get('ok', False)
+    except Exception as e:
+        print(f"Worker xabar o'chirish xatosi ({chat_id}): {e}")
+        return False
+
+
+def build_event_text(event):
+    """Tadbir uchun chiroyli Telegram xabar matni.
+    Tartib: description → ajratgich → tafsilotlar → ovoz so'rovi
+    """
+    lines = []
+
+    # Birinchi — tavsif (rasm caption'i sifatida keladi)
+    if event.description:
+        lines.append(event.description)
+        lines.append("")
+
+    lines.append("─" * 20)
+
+    # Tadbir nomi — tavsifdan keyin, speaker oldida (sarlavha)
+    if event.name:
+        lines.append(f"🎉 <b>{event.name}</b>")
+
+    if event.speaker:
+        lines.append(f"🎙 <b>Speaker:</b> {event.speaker}")
+    if event.theme:
+        lines.append(f"📌 <b>Mavzu:</b> {event.theme}")
+
+    lines.append("")
+    lines.append(f"📅 <b>Sana:</b> {event.date}")
+    lines.append(f"🕐 <b>Vaqt:</b> {event.time}")
+
+    if event.latitude and event.longitude:
+        map_url = f"https://maps.google.com/?q={event.latitude},{event.longitude}"
+        lines.append(f"📍 <b>Manzil:</b> {event.location}")
+        lines.append(f'🗺 <a href="{map_url}">Xaritada ko\'rish</a>')
+    else:
+        lines.append(f"📍 <b>Manzil:</b> {event.location}")
+
+    lines.append("─" * 20)
+    lines.append("")
+    lines.append("👇 <i>Ishtirok etasizmi?</i>")
+
+    return "\n".join(lines)
+
+
+def send_event_to_all(event, image_url=None, image_path=None, bot_username=None):
+    """
+    Tadbirni barcha foydalanuvchi va guruhlarga batch tarzda yuboradi.
+    Qaytadi: yuborilgan foydalanuvchilar soni.
+    """
+    from apps.users.models import User
+    from apps.events.models import EventSendLog
+
+    def _log(*, user=None, group=None, chat_id=None, msg_id=None):
+        """Yuborishni jurnalga yozadi (tahrirlashda eski xabarni o'chirish uchun)."""
+        defaults = {
+            'target_type': 'group' if group else 'user',
+            'chat_id': str(chat_id),
+            'message_id': msg_id or None,
+            'status': 'success' if msg_id else 'failed',
+            'error': '' if msg_id else "Yuborilmadi",
+        }
+        try:
+            if group:
+                EventSendLog.objects.update_or_create(event=event, group=group, defaults=defaults)
+            else:
+                EventSendLog.objects.update_or_create(event=event, user=user, defaults=defaults)
+        except Exception as e:
+            print(f"[LOG XATO] {e}")
+
+    text = build_event_text(event)
+
+    from config.telegraph_utils import create_telegraph_page
+    if not event.telegraph_url:
+        t_url = create_telegraph_page(event.name or "Tadbir")
+        if t_url:
+            event.telegraph_url = t_url
+            event.save(update_fields=['telegraph_url'])
+
+    sent_count = 0
+
+    # Foydalanuvchilarga batch tarzda
+    if event.send_to_all_users:
+        users = list(User.objects.filter(
+            role='user', is_active=True
+        ).exclude(tg_id__isnull=True).exclude(tg_id=''))
+
+        for i, user in enumerate(users):
+            msg_id = send_event_message(
+                chat_id=user.tg_id,
+                text=text,
+                event_id=event.id,
+                image_url=image_url,
+                image_path=image_path,
+                telegraph_url=event.telegraph_url,
+                is_group=False,
+            )
+            _log(user=user, chat_id=user.tg_id, msg_id=msg_id)
+            if msg_id:
+                sent_count += 1
+            # Har 10 tadan keyin 0.5 sekund kutish
+            if (i + 1) % 10 == 0:
+                time.sleep(0.5)
+
+    # Guruhlarga
+    for group in event.send_groups.all():
+        msg_id = send_event_message(
+            chat_id=group.tg_id,
+            text=text,
+            event_id=event.id,
+            image_url=image_url,
+            image_path=image_path,
+            telegraph_url=event.telegraph_url,
+            is_group=True,
+            bot_username=bot_username,
+        )
+        _log(group=group, chat_id=group.tg_id, msg_id=msg_id)
+
+    return sent_count
+
+def create_channel_invite_link(channel_id,member_limit=1):
+    """
+    Yopiq kanal uchun bir martalik taklif havolasi yatadi.
+    member_limit=1 - havoladan faqat 1 kishi foydalana oladi.
+    """
+    token = settings.CLIENT_BOT_TOKEN
+    if not token:
+        print("CLIENT_BOT_TOKE yuq")
+        return None
+    url = f"https://api.telegram.org/bot{token}/createChatInviteLink"
+    try:
+        r = requests.post(url,json={
+            'chat_id': channel_id,
+            'member_limit': member_limit,
+        },timeout=10)
+        resp = r.json()
+        if resp.get('ok'):
+            return resp['result']['invite_link']
+        print(f"[INVITE XATO] {resp}")
+        return None
+    except Exception as e:
+        print(f"Invite link xatosi:{e}")
+        return None
+
+
+def send_subscription_invite(user_tg_id, links, end_date):
+    """
+    Obuna faollashganda foydalanuvchiga taklif yuboradi.
+    links — ro'yxat: [("Kanal", "https://..."), ("Guruh", "https://...")]
+    """
+    text = (
+        "🎉 <b>Tabriklaymiz! Obunangiz faollashtirildi.</b>\n\n"
+        f"📅 Amal qilish muddati: <b>{end_date}</b> gacha\n\n"
+        "Quyidagi havolalar orqali yopiq guruhlarimizga qo'shiling 👇"
+    )
+    # Har bir havola uchun alohida tugma
+    buttons = []
+    for name, link in links:
+        buttons.append([{"text": f"🔑 {name}ga kirish", "url": link}])
+
+    keyboard = {"inline_keyboard": buttons}
+
+    token = settings.CLIENT_BOT_TOKEN
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    try:
+        r = requests.post(url, json={
+            'chat_id': user_tg_id,
+            'text': text,
+            'parse_mode': 'HTML',
+            'reply_markup': keyboard,
+        }, timeout=10)
+        return r.json().get('ok', False)
+    except Exception as e:
+        print(f"Taklif yuborish xatosi: {e}")
+        return False
+
+
+
+def ban_from_channel(channel_id,user_tg_id):
+    """Foydalanuvchini yopiq kanal/guruhdan chiqaradi (obuna tugaganda).
+
+    Diqqat: darhol unban QILMAYMIZ. Sabab: (1) oddiy guruhda darhol unban odamni
+    qayta qo'shib yuboradi; (2) obunasi tugagan odam baribir o'zicha qayta kira
+    olmasligi kerak. Qayta a'zo bo'lganda administrator uni qayta qo'shadi.
+    """
+    token = settings.CLIENT_BOT_TOKEN
+    if not token:
+        return False
+    url = f"https://api.telegram.org/bot{token}/banChatMember"
+    try:
+        r = requests.post(url,json={
+            'chat_id': channel_id,
+            'user_id': int(user_tg_id),
+        },timeout=10)
+        resp = r.json()
+        if not resp.get('ok'):
+            print(f"[BAN XATO]{resp}")
+        return resp.get('ok',False)
+    except Exception as e:
+        print(f"Ban xatosi:{e}")
+        return False
+
+
+def send_subscription_warning(user_tg_id, end_date,days_left):
+    """
+    Obuna tugashidan oldin ogohlantirish yuboradi.
+    days_left -- necha kun qolganini (0 bulsa bugun tugaydi)
+    """
+    token = settings.CLIENT_BOT_TOKEN
+    if not token:
+        return False
+
+    if days_left ==0:
+        text = (
+            "⏳ <b>Eslatma: obunangiz BUGUN tugaydi!</b>\n\n"
+            f"📅 Tugash sanasi: <b>{end_date}</b>\n\n"
+            "<i>Agar bugun uzaytirmasangiz, ertaga yopiq kanaldan "
+            "avtomatik chiqarib yuborilasiz.</i>\n\n"
+            "Obunani uzaytirishni xohlaysizmi?"
+        )
+    else:
+        text = (
+            f"⏳ <b>Obunangiz tugashiga {days_left} kun qoldi</b>\n\n"
+            f"📅 Tugash sanasi: <b>{end_date}</b>\n\n"
+            "<i>Obuna tugaganda yopiq kanaldan chiqarib yuborilasiz.</i>\n\n"
+            "Obunani uzaytirishni xohlaysizmi?"
+        )
+
+    keyboard = {
+        "inline_keyboard": [[
+            {"text": "✅ Ha, administratorga murojaat", "callback_data": "sub_extend:yes"},
+            {"text": "❌ Yo'q", "callback_data": "sub_extend:no"},
+        ]]
+    }
+
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    try:
+        r = requests.post(url, json={
+            'chat_id': user_tg_id,
+            'text': text,
+            'parse_mode': 'HTML',
+            'reply_markup': keyboard,
+        }, timeout=10)
+        return r.json().get('ok', False)
+    except Exception as e:
+        print(f"Ogohlantirish xatosi: {e}")
+        return False
+
+
+def send_worker_task(worker_tg_id, event_name, event_date, task_description, deadline_date, days_before, task_id, is_update=False):
+    """Ishchiga vazifa xabari (ishchilar boti tokeni bilan).
+
+    is_update=True bo'lsa — 'yangi vazifa' emas, 'tadbir o'zgardi' deb yuboradi.
+    """
+    token = settings.WORKER_BOT_TOKEN
+    if not token:
+        print("WORKER_BOT_TOKEN yo'q!")
+        return False
+    if is_update:
+        header = (
+            "⚠️ <b>DIQQAT! TADBIR O'ZGARDI!</b>\n"
+            "<i>Quyidagi tadbir/vazifa yangilandi — iltimos, e'tibor bering 👇</i>\n\n"
+        )
+    else:
+        header = "🎉 <b>Sizga yangi tadbir va vazifa biriktirildi!</b>\n\n"
+    text = (
+        header +
+        f"🎉 Tadbir: <b>{event_name}</b>\n"
+        f"📅 Sana: {event_date}\n\n"
+        f"📌 Vazifa: {task_description}\n"
+        f"⏳ Qachongacha: {deadline_date}"
+    )
+    keyboard = {
+        "inline_keyboard": [[
+            {"text": "✅ Bajardim", "callback_data": f"we_done_{task_id}"},
+        ]]
+    }
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    try:
+        r = requests.post(url, json={
+            'chat_id': worker_tg_id, 'text': text,
+            'parse_mode': 'HTML', 'reply_markup': keyboard,
+        }, timeout=10)
+        resp = r.json()
+        if resp.get('ok'):
+            # Xabar ID sini qaytaramiz (NotificationLog uchun kerak bo'lishi mumkin)
+            return resp['result']['message_id']
+        print(f"[WORKER XATO] {resp}")
+        return False
+    except Exception as e:
+        print(f"Ishchiga xabar xatosi: {e}")
+        return False
+
+
+def send_boss_task_pending(boss_tg_id,worker_name,event_name,event_date,task_description,deadline_date, is_update=False):
+    """
+    Boshliqqa har bir vazifa alohida - 'Kutilmoqda' statusi bilan.
+    Vazifa bajarilganda shu xabar 'Bajarildi' ga yangilanadi.
+    is_update=True bo'lsa — 'tadbir o'zgardi' deb yuboradi.
+    Qaytadi : yuborilgan xabarning message_id si (NotificationLog un).
+    """
+    token= settings.WORKER_BOT_TOKEN
+    if not token:
+        print("WORKER_BOT_TOKEN yuq!")
+        return None
+    header = "⚠️ <b>Tadbir o'zgardi — vazifa yangilandi</b>\n\n" if is_update else "🆕 <b>Yangi vazifa</b>\n\n"
+    text = (
+        header +
+        f"👤 Ishchi: <b>{worker_name}</b>\n"
+        f"🎉 Tadbir: <b>{event_name}</b>\n"
+        f"📅 Sana: {event_date}\n"
+        f"📌 Vazifa: <b>{task_description}</b>\n"
+        f"⏳ Deadline: <b>{deadline_date}</b>\n"
+        f"📊 Holati: ⏳ Kutilmoqda"
+    )
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    try:
+        r = requests.post(url, json={
+            'chat_id': boss_tg_id,'text':text,'parse_mode':'HTML',
+        },timeout=10)
+        resp = r.json()
+        if resp.get('ok'):
+            return resp['result']['message_id']
+        print(f"[BOSS XATO] {resp}")
+        return None
+    except Exception as e:
+        print(f"Boshliqqa xabar xatosi: {e}")
+        return None
+
+
+
+def send_worker_bot_message(chat_id, text, parse_mode='HTML', reply_markup=None):
+    """Ishchilar boti tokeni bilan xabar yuboradi (kechikkan/eslatma xabarlari uchun)."""
+    token = settings.WORKER_BOT_TOKEN
+    if not token:
+        print("WORKER_BOT_TOKEN yo'q!")
+        return False
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    payload = {'chat_id': chat_id, 'text': text, 'parse_mode': parse_mode}
+    if reply_markup:
+        payload['reply_markup'] = reply_markup
+    try:
+        r = requests.post(url, json=payload, timeout=10)
+        return r.json().get('ok', False)
+    except Exception as e:
+        print(f"Worker bot xabar xatosi: {e}")
+        return False
+
+
+def send_task_updated(worker_tg_id, event_name, event_date, task_description, deadline_date):
+    """Tadbir/vazifa yangilanganda ishchiga xabar."""
+    token = settings.WORKER_BOT_TOKEN
+    if not token:
+        return False
+    text = (
+        "📝 <b>Tadbir yangilandi!</b>\n\n"
+        f"🎉 Tadbir: <b>{event_name}</b>\n"
+        f"📅 Yangi sana: <b>{event_date}</b>\n\n"
+        f"📌 Sizning vazifangiz: <b>{task_description}</b>\n"
+        f"⏳ Yangi deadline: <b>{deadline_date}</b>\n\n"
+        "Iltimos, o'zgarishlarni hisobga oling!"
+    )
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    try:
+        r = requests.post(url, json={
+            'chat_id': worker_tg_id, 'text': text, 'parse_mode': 'HTML',
+        }, timeout=10)
+        return r.json().get('ok', False)
+    except Exception as e:
+        print(f"Yangilanish xabar xatosi: {e}")
+        return False
+
+
+def build_member_card(profile):
+    """Foydalanuvchi ma'lumot kartochkasi matni (Safarlar guruhi uchun)."""
+    name = f"{profile.name or ''} {profile.surname or ''}".strip() or "—"
+    lines = [f"👤 <b>{name}</b>"]
+
+    if profile.phone:
+        lines.append(f"📞 {profile.phone}")
+    if profile.work_location:
+        lines.append(f"📍 {profile.work_location}")
+
+    company = profile.brand or ''
+    if company and profile.industry:
+        lines.append(f"🏢 {company} — {profile.industry}")
+    elif company:
+        lines.append(f"🏢 {company}")
+    elif profile.industry:
+        lines.append(f"🏢 {profile.industry}")
+
+    if profile.instagram:
+        insta = profile.instagram.strip().lstrip('@')
+        lines.append(f"📷 @{insta}")
+
+    return "\n".join(lines)
+
+
+def send_member_to_trips(profile):
+    """
+    Bitta foydalanuvchi ma'lumotini Safarlar guruhiga yuboradi (rasm bilan).
+    Qaytadi: (muvaffaqiyat, xabar) — (True, 'ok') yoki (False, 'sabab')
+    """
+    import os
+
+    token = settings.CLIENT_BOT_TOKEN
+    group_id = getattr(settings, 'TRIPS_GROUP_ID', '')
+
+    if not token:
+        return False, "CLIENT_BOT_TOKEN yo'q"
+    if not group_id:
+        return False, "TRIPS_GROUP_ID .env faylida sozlanmagan"
+
+    text = build_member_card(profile)
+
+    # Rasm bo'lsa — rasm bilan yuboramiz
+    image_path = None
+    try:
+        if profile.photo and os.path.exists(profile.photo.path):
+            image_path = profile.photo.path
+    except Exception:
+        image_path = None
+
+    try:
+        if image_path:
+            url = f"https://api.telegram.org/bot{token}/sendPhoto"
+            with open(image_path, 'rb') as photo:
+                r = requests.post(url, data={
+                    'chat_id': group_id,
+                    'caption': text,
+                    'parse_mode': 'HTML',
+                }, files={'photo': photo}, timeout=30)
+        else:
+            url = f"https://api.telegram.org/bot{token}/sendMessage"
+            r = requests.post(url, json={
+                'chat_id': group_id,
+                'text': text,
+                'parse_mode': 'HTML',
+            }, timeout=15)
+
+        resp = r.json()
+        if resp.get('ok'):
+            return True, "ok"
+        return False, resp.get('description', 'nomalum xato')
+    except Exception as e:
+        return False, str(e)
+
+
+def get_trips_membership(tg_id):
+    """Foydalanuvchi Safarlar guruhida a'zomi — tri-state qaytaradi.
+
+    Qaytadi: 'member' | 'not_member' | 'error'
+      - 'error' — tarmoq/DNS/timeout sabab TEKSHIRIB BO'LMADI (a'zo emas degani EMAS!).
+    Bot guruhda admin bo'lishi shart.
+    """
+    token = settings.CLIENT_BOT_TOKEN
+    group_id = getattr(settings, 'TRIPS_GROUP_ID', '')
+    if not token or not group_id or not tg_id:
+        return 'not_member'
+
+    url = f"https://api.telegram.org/bot{token}/getChatMember"
+    try:
+        r = requests.get(url, params={'chat_id': group_id, 'user_id': tg_id}, timeout=10)
+        resp = r.json()
+        if not resp.get('ok'):
+            return 'not_member'
+        status = resp['result'].get('status', '')
+        return 'member' if status in ('creator', 'administrator', 'member', 'restricted') else 'not_member'
+    except Exception as e:
+        # Tarmoq xatosi — "a'zo emas" bilan aralashtirmaymiz
+        print(f"getChatMember xatosi ({tg_id}): {e}")
+        return 'error'
+
+
+def is_member_of_trips_group(tg_id):
+    """Foydalanuvchi Safarlar guruhida a'zomi (True/False).
+
+    Bitta yuborishдаgi ogohlantirish uchun — tarmoq xatosi ham False bo'ladi.
+    """
+    return get_trips_membership(tg_id) == 'member'
