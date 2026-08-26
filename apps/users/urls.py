@@ -8,6 +8,7 @@ urlpatterns = [
     path('users/send-to-trips/bulk/', views.users_send_to_trips_bulk, name='users_send_to_trips_bulk'),
     path('users/manual-add/', views.user_manual_add, name='user_manual_add'),
     path('users/<int:pk>/', views.user_detail, name='user_detail'),
+    path('users/<int:pk>/edit/', views.user_edit, name='user_edit'),
     path('users/<int:pk>/delete/', views.user_delete, name='user_delete'),
     path('users/<int:pk>/photo/', views.user_photo_upload, name='user_photo_upload'),
     path('users/<int:pk>/send/', views.user_send_message, name='user_send_message'),

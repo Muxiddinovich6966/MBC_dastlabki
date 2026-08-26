@@ -49,7 +49,7 @@ class TemplateTask(models.Model):
     """Shablon ichidagi bitta vazifa namunasi."""
 
     template = models.ForeignKey(Template, on_delete=models.CASCADE, related_name='tasks', verbose_name="Shablon")
-    worker = models.ForeignKey(Worker, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Ishchi")
+    workers = models.ManyToManyField(Worker, blank=True, related_name='template_tasks', verbose_name="Ishchilar")
 
     description = models.CharField(max_length=500, verbose_name="Vazifa nomi")
     days_before = models.IntegerField(verbose_name="Necha kun")
@@ -95,7 +95,11 @@ class Task(models.Model):
     ]
 
     event = models.ForeignKey(WorkEvent, on_delete=models.CASCADE, related_name='tasks', verbose_name="Tadbir")
-    worker = models.ForeignKey(Worker, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Ishchi")
+    workers = models.ManyToManyField(Worker, blank=True, related_name='tasks', verbose_name="Ishchilar")
+    completed_by = models.ForeignKey(
+        Worker, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='completed_tasks', verbose_name="Kim bajardi"
+    )
 
     description = models.CharField(max_length=500, verbose_name="Vazifa nomi")
     days_before = models.IntegerField(verbose_name="Necha kun")
@@ -117,11 +121,17 @@ class Task(models.Model):
 
 
 class NotificationLog(models.Model):
-    """Boshliqqa yuborilgan xabar ID sini saqlash (keyin yangilash/o'chirish uchun)."""
+    """Yuborilgan xabar ID sini saqlash (keyin yangilash/o'chirish uchun)."""
 
     task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name='notification_logs')
     chat_id = models.BigIntegerField()
     message_id = models.BigIntegerField()
+    role = models.CharField(
+        max_length=10,
+        choices=[('worker', 'Ishchi'), ('boss', 'Boshliq')],
+        default='boss',
+        verbose_name="Kimga yuborilgan"
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
 

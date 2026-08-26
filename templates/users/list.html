@@ -8,9 +8,21 @@
     <i class="fas fa-search"></i>
     <input type="text" name="search" class="form-control" placeholder="Ism, telefon, username..." value="{{ search }}">
     {% if trips %}<input type="hidden" name="trips" value="{{ trips }}">{% endif %}
+    {% if sub %}<input type="hidden" name="sub" value="{{ sub }}">{% endif %}
 </form>
 <form method="get" style="display:inline;">
     {% if search %}<input type="hidden" name="search" value="{{ search }}">{% endif %}
+    {% if trips %}<input type="hidden" name="trips" value="{{ trips }}">{% endif %}
+    <select name="sub" class="form-control" onchange="this.form.submit()" title="Obuna holati">
+        <option value="">Obuna: hammasi</option>
+        <option value="active" {% if sub == 'active' %}selected{% endif %}>Faol obuna</option>
+        <option value="expired" {% if sub == 'expired' %}selected{% endif %}>Tugagan obuna</option>
+        <option value="none" {% if sub == 'none' %}selected{% endif %}>Obunasi yo'q</option>
+    </select>
+</form>
+<form method="get" style="display:inline;">
+    {% if search %}<input type="hidden" name="search" value="{{ search }}">{% endif %}
+    {% if sub %}<input type="hidden" name="sub" value="{{ sub }}">{% endif %}
     <select name="trips" class="form-control" onchange="this.form.submit()" title="Safarlarga yuborish holati">
         <option value="">Safarlar: hammasi</option>
         <option value="sent" {% if trips == 'sent' %}selected{% endif %}>Yuborilgan</option>
@@ -115,12 +127,12 @@
         </span>
         <div style="display:flex; gap:8px;">
             {% if page_obj.has_previous %}
-            <a href="?{% if search %}search={{ search }}&{% endif %}{% if trips %}trips={{ trips }}&{% endif %}page={{ page_obj.previous_page_number }}" class="btn btn-secondary btn-sm">
+            <a href="?{% if search %}search={{ search }}&{% endif %}{% if trips %}trips={{ trips }}&{% endif %}{% if sub %}sub={{ sub }}&{% endif %}page={{ page_obj.previous_page_number }}" class="btn btn-secondary btn-sm">
                 <i class="fas fa-chevron-left"></i> Oldingi
             </a>
             {% endif %}
             {% if page_obj.has_next %}
-            <a href="?{% if search %}search={{ search }}&{% endif %}{% if trips %}trips={{ trips }}&{% endif %}page={{ page_obj.next_page_number }}" class="btn btn-secondary btn-sm">
+            <a href="?{% if search %}search={{ search }}&{% endif %}{% if trips %}trips={{ trips }}&{% endif %}{% if sub %}sub={{ sub }}&{% endif %}page={{ page_obj.next_page_number }}" class="btn btn-secondary btn-sm">
                 Keyingi <i class="fas fa-chevron-right"></i>
             </a>
             {% endif %}

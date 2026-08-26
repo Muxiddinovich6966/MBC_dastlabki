@@ -16,6 +16,30 @@ def _compute_deadline(event_date, days, when):
     delta = timedelta(days=days or 0)
     return event_date + delta if when == 'after' else event_date - delta
 
+
+def _create_tasks_from_template(work_event, template):
+    """Shablon vazifalaridan tadbir vazifalarini yaratadi.
+
+    Har bir shablon vazifasi — bitta Task bo'ladi. Vazifaga bir nechta ishchi
+    biriktirilgan bo'lsa, hammasi shu bitta Task ga bog'lanadi. Ulardan biri
+    bajarsa — vazifa hamma uchun 'Bajarildi' bo'ladi.
+    """
+    created_tasks = []
+    for tt in template.tasks.all():
+        deadline = _compute_deadline(work_event.event_date, tt.days_before, tt.when)
+        task = Task.objects.create(
+            event=work_event,
+            description=tt.description,
+            days_before=tt.days_before,
+            when=tt.when,
+            hours_before=tt.hours_before,
+            deadline_date=deadline,
+            instruction=tt.instruction,
+        )
+        task.workers.set(tt.workers.all())
+        created_tasks.append(task)
+    return created_tasks
+
 @login_required(login_url='/login/')
 def workers_list(request):
     """Ishchilar ruyxati"""
@@ -72,20 +96,19 @@ def template_detail(request,pk):
     workers = Worker.objects.filter(role__in=['worker','boss'])
 
     if request.method == 'POST':
-        worker_id = request.POST.get('worker') or None
-        TemplateTask.objects.create(
+        task = TemplateTask.objects.create(
             template=template,
-            worker_id=worker_id,
             description=request.POST.get('description'),
             days_before=request.POST.get('days_before'),
             when=request.POST.get('when', 'before'),
             hours_before=request.POST.get('hours_before') or None,
             instruction=request.POST.get('instruction',''),
         )
+        task.workers.set(request.POST.getlist('workers'))
         messages.success(request,"Vazifa shablonga qo'shildi.")
         return redirect('template_detail',pk=template.pk)
 
-    tasks = template.tasks.select_related('worker').all()
+    tasks = template.tasks.prefetch_related('workers').all()
     return render(request,"workers/template_detail.html",{
         'template':template,
         'tasks': tasks,
@@ -99,6 +122,29 @@ def template_task_delete(request, pk):
     task.delete()
     messages.success(request,"Vazifa o'chirildi.")
     return redirect('template_detail',pk=template_pk)
+
+
+@login_required(login_url='/login/')
+def template_task_edit(request, pk):
+    """Shablonni ichidagi vazifalarni tahrirlash"""
+    task = get_object_or_404(TemplateTask,pk=pk)
+    workers = Worker.objects.filter(role__in=['worker','boss'])
+
+    if request.method == 'POST':
+        task.description = request.POST.get('description')
+        task.days_before = request.POST.get('days_before')
+        task.when = request.POST.get('when','before')
+        task.hours_before = request.POST.get('hours_before') or None
+        task.instruction = request.POST.get('instruction','')
+        task.save()
+        task.workers.set(request.POST.getlist('workers'))
+        messages.success(request,"Vazifa yangilandi.")
+        return redirect('template_detail',pk=task.template.pk)
+
+    return render(request,'workers/template_task_edit.html',{
+        'task':task,
+        'workers':workers,
+    })
 
 @login_required(login_url='/login/')
 def template_delete(request, pk):
@@ -142,19 +188,7 @@ def work_events_list(request):
         created_tasks = []
         if template_id:
             template = Template.objects.get(pk=template_id)
-            for tt in template.tasks.all():
-                deadline = _compute_deadline(work_event.event_date, tt.days_before, tt.when)
-                task = Task.objects.create(
-                    event=work_event,
-                    worker=tt.worker,
-                    description=tt.description,
-                    days_before=tt.days_before,
-                    when=tt.when,
-                    hours_before=tt.hours_before,
-                    deadline_date=deadline,
-                    instruction=tt.instruction,
-                )
-                created_tasks.append(task)
+            created_tasks = _create_tasks_from_template(work_event, template)
 
         # Ishchilarga va boshliqqa xabar yuboramiz
         _notify_new_tasks(work_event, created_tasks)
@@ -188,15 +222,18 @@ def _notify_new_tasks(work_event, tasks, is_update=False):
     bosses = list(Worker.objects.filter(role='boss').exclude(telegram_id__isnull=True))
 
     for task in tasks:
-        worker = task.worker
-        worker_name = worker.name if worker else "Biriktirilmagan"
+        task_workers = list(task.workers.all())
+        worker_name = ", ".join(w.name for w in task_workers) if task_workers else "Biriktirilmagan"
         deadline_str = (
             task.deadline_date.strftime('%d.%m.%Y')
             if not isinstance(task.deadline_date, str) else task.deadline_date
         )
 
-        # 1. Ishchiga o'z vazifasi (Bajardim tugmasi bilan) — message_id ni saqlaymiz
-        if worker and worker.telegram_id:
+        # 1. Har bir biriktirilgan ishchiga o'z vazifasi (Bajardim tugmasi bilan)
+        #    — barchasi bitta task.id ga bog'lanadi, biri bajarsa hammasi yopiladi.
+        for worker in task_workers:
+            if not worker.telegram_id:
+                continue
             w_msg_id = send_worker_task(
                 worker.telegram_id, work_event.name, event_date_str,
                 task.description, deadline_str, task.days_before, task.id,
@@ -233,7 +270,7 @@ def _delete_event_task_messages(work_event):
 def work_event_detail(request, pk):
     """Bitta tadbirning vazifalari va ularning holati."""
     work_event = get_object_or_404(WorkEvent, pk=pk)
-    tasks = work_event.tasks.select_related('worker').order_by('deadline_date')
+    tasks = work_event.tasks.prefetch_related('workers').order_by('deadline_date')
 
     return render(request, 'workers/event_detail.html', {
         'work_event': work_event,
@@ -290,17 +327,7 @@ def work_event_edit(request, pk):
                 work_event.tasks.all().delete()
                 if new_template_id:
                     template = Template.objects.get(pk=new_template_id)
-                    for tt in template.tasks.all():
-                        Task.objects.create(
-                            event=work_event,
-                            worker=tt.worker,
-                            description=tt.description,
-                            days_before=tt.days_before,
-                            when=tt.when,
-                            hours_before=tt.hours_before,
-                            deadline_date=_compute_deadline(work_event.event_date, tt.days_before, tt.when),
-                            instruction=tt.instruction,
-                        )
+                    _create_tasks_from_template(work_event, template)
             else:
                 # Shablon o'zgarmagan (sana yoki nomi o'zgargan) — mavjud vazifalarni
                 # yangilab, qayta faollashtiramiz (deadline qayta hisoblanadi, holat pending)
@@ -308,7 +335,10 @@ def work_event_edit(request, pk):
                     task.deadline_date = _compute_deadline(work_event.event_date, task.days_before, task.when)
                     task.status = 'pending'
                     task.reminder_sent = False
-                    task.save(update_fields=['deadline_date', 'status', 'reminder_sent'])
+                    task.time_reminder_sent = False
+                    task.completed_by = None
+                    task.save(update_fields=['deadline_date', 'status', 'reminder_sent',
+                                             'time_reminder_sent', 'completed_by'])
 
             # 2) Yangi xabarlarni yuboramiz ('Bajardim' tugmasi bilan) — 'tadbir o'zgardi' ogohlantirishi bilan
             _notify_new_tasks(work_event, list(work_event.tasks.all()), is_update=True)

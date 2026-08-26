@@ -165,7 +165,7 @@ def job_delayed_tasks():
     # Deadline o'tgan, hali bajarilmagan vazifalar
     delayed = Task.objects.filter(
         deadline_date__lt=today, status='pending'
-    ).select_related('worker', 'event')
+    ).select_related('event').prefetch_related('workers')
 
     if not delayed.exists():
         return
@@ -176,7 +176,8 @@ def job_delayed_tasks():
     )
 
     for task in delayed:
-        worker_name = task.worker.name if task.worker else "Noma'lum"
+        task_workers = list(task.workers.all())
+        worker_name = ", ".join(w.name for w in task_workers) if task_workers else "Noma'lum"
 
         # 1. Boshliq va adminga xabar
         boss_text = (
@@ -192,17 +193,19 @@ def job_delayed_tasks():
             except Exception as e:
                 log.error(f"[Boss/Admin xabar xatosi] {e}")
 
-        # 2. Ishchiga ogohlantirish (Bajardim tugmasi yo'q)
-        if task.worker and task.worker.telegram_id:
-            worker_text = (
-                "⚠️ <b>DIQQAT!</b> Siz quyidagi vazifani vaqtida bajarmadingiz!\n\n"
-                f"🎉 Tadbir: <b>{task.event.name}</b>\n"
-                f"📌 Vazifa: <b>{task.description}</b>\n"
-                f"📅 Kechikkan sana: <b>{task.deadline_date}</b>\n\n"
-                "Iltimos, tezroq bajaring! \"📝 Aktiv vazifalar\" bo'limidan topishingiz mumkin."
-            )
+        # 2. Har bir biriktirilgan ishchiga ogohlantirish (Bajardim tugmasi yo'q)
+        worker_text = (
+            "⚠️ <b>DIQQAT!</b> Siz quyidagi vazifani vaqtida bajarmadingiz!\n\n"
+            f"🎉 Tadbir: <b>{task.event.name}</b>\n"
+            f"📌 Vazifa: <b>{task.description}</b>\n"
+            f"📅 Kechikkan sana: <b>{task.deadline_date}</b>\n\n"
+            "Iltimos, tezroq bajaring! \"📝 Aktiv vazifalar\" bo'limidan topishingiz mumkin."
+        )
+        for worker in task_workers:
+            if not worker.telegram_id:
+                continue
             try:
-                send_worker_bot_message(task.worker.telegram_id, worker_text)
+                send_worker_bot_message(worker.telegram_id, worker_text)
             except Exception as e:
                 log.error(f"[Ishchiga xabar xatosi] {e}")
 
@@ -221,10 +224,12 @@ def job_upcoming_deadlines():
     today = date.today()
     tasks = Task.objects.filter(
         deadline_date=today, status='pending', reminder_sent=False
-    ).select_related('worker', 'event')
+    ).select_related('event').prefetch_related('workers')
 
+    import json
     for task in tasks:
-        if not task.worker or not task.worker.telegram_id:
+        task_workers = [w for w in task.workers.all() if w.telegram_id]
+        if not task_workers:
             continue
         hours_str = f" ({task.hours_before} soat oldin)" if task.hours_before else ""
         text = (
@@ -237,17 +242,20 @@ def job_upcoming_deadlines():
         keyboard = {"inline_keyboard": [[
             {"text": "✅ Bajardim", "callback_data": f"we_done_{task.id}"}
         ]]}
-        import json
-        try:
-            send_worker_bot_message(
-                task.worker.telegram_id, text,
-                reply_markup=json.dumps(keyboard)
-            )
+        sent_any = False
+        for worker in task_workers:
+            try:
+                send_worker_bot_message(
+                    worker.telegram_id, text,
+                    reply_markup=json.dumps(keyboard)
+                )
+                sent_any = True
+                log.info(f"[Deadline eslatmasi] {worker.name} — {task.description}")
+            except Exception as e:
+                log.error(f"[Deadline eslatma xatosi] {e}")
+        if sent_any:
             task.reminder_sent = True
             task.save(update_fields=['reminder_sent'])
-            log.info(f"[Deadline eslatmasi] {task.worker.name} — {task.description}")
-        except Exception as e:
-            log.error(f"[Deadline eslatma xatosi] {e}")
 
 
 # ─────────────────────────────────────────────
@@ -276,9 +284,11 @@ def job_event_time_reminders():
 
         tasks = Task.objects.filter(
             event=event, status='pending', time_reminder_sent=False
-        ).select_related('worker')
+        ).prefetch_related('workers')
+        import json
         for task in tasks:
-            if not task.worker or not task.worker.telegram_id:
+            task_workers = [w for w in task.workers.all() if w.telegram_id]
+            if not task_workers:
                 continue
             event_time_str = event.event_time.strftime('%H:%M') if hasattr(event.event_time, 'strftime') else str(event.event_time)
             text = (
@@ -291,17 +301,20 @@ def job_event_time_reminders():
             keyboard = {"inline_keyboard": [[
                 {"text": "✅ Bajardim", "callback_data": f"we_done_{task.id}"}
             ]]}
-            import json
-            try:
-                send_worker_bot_message(
-                    task.worker.telegram_id, text,
-                    reply_markup=json.dumps(keyboard)
-                )
+            sent_any = False
+            for worker in task_workers:
+                try:
+                    send_worker_bot_message(
+                        worker.telegram_id, text,
+                        reply_markup=json.dumps(keyboard)
+                    )
+                    sent_any = True
+                    log.info(f"[Tadbir 2 soat] {worker.name} — {task.description}")
+                except Exception as e:
+                    log.error(f"[Tadbir eslatma xatosi] {e}")
+            if sent_any:
                 task.time_reminder_sent = True
                 task.save(update_fields=['time_reminder_sent'])
-                log.info(f"[Tadbir 2 soat] {task.worker.name} — {task.description}")
-            except Exception as e:
-                log.error(f"[Tadbir eslatma xatosi] {e}")
 
 class Command(BaseCommand):
     help = "Avtomatik vazifalar schedulerini ishga tushiradi"

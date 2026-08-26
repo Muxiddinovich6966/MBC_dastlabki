@@ -31,7 +31,7 @@ def get_events_with_pending_tasks(worker_tg_id):
     if not worker:
         return []
     event_ids = (Task.objects
-                 .filter(worker=worker, status__in=['pending', 'overdue'])
+                 .filter(workers=worker, status__in=['pending', 'overdue'])
                  .values_list('event_id', flat=True).distinct())
     return list(WorkEvent.objects.filter(id__in=list(event_ids)).order_by('event_date'))
 
@@ -48,20 +48,31 @@ def get_pending_tasks_for_event(event_id, worker_tg_id):
     if not worker:
         return []
     return list(Task.objects
-                .filter(event_id=event_id, worker=worker, status__in=['pending', 'overdue'])
+                .filter(event_id=event_id, workers=worker, status__in=['pending', 'overdue'])
                 .select_related('event'))
 
 
 @sync_to_async
 def get_task(task_id):
     from apps.workers.models import Task
-    return Task.objects.filter(id=task_id).select_related('event', 'worker').first()
+    return Task.objects.filter(id=task_id).select_related('event').first()
 
 
 @sync_to_async
-def complete_task(task_id):
-    from apps.workers.models import Task
-    Task.objects.filter(id=task_id).update(status='completed')
+def complete_task(task_id, completed_by_tg_id=None):
+    """Vazifani ATOMIK ravishda 'bajarildi' qiladi.
+
+    Faqat hali bajarilmagan bo'lsa yangilaydi (WHERE status != 'completed').
+    Qaytadi: 1 — aynan biz bajardik; 0 — allaqachon boshqa ishchi bajargan.
+    Bir vazifa bir nechta ishchiga biriktirilib, hammasi bir vaqtda bosganda
+    faqat birinchisi yutadi — qolganlari 0 oladi.
+    """
+    from apps.workers.models import Task, Worker
+    worker = (Worker.objects.filter(telegram_id=completed_by_tg_id).first()
+              if completed_by_tg_id else None)
+    return (Task.objects.filter(id=task_id)
+            .exclude(status='completed')
+            .update(status='completed', completed_by=worker))
 
 
 @sync_to_async
@@ -200,6 +211,14 @@ async def process_task_confirm(callback: CallbackQuery, state: FSMContext):
     if not task:
         await callback.answer("Vazifa topilmadi!", show_alert=True)
         return
+    if task.status == 'completed':
+        # Bir vaqtda bosilib, boshqa ishchi allaqachon bajargan bo'lishi mumkin.
+        await callback.answer("Bu vazifa allaqachon bajarilgan!", show_alert=True)
+        try:
+            await callback.message.edit_reply_markup(reply_markup=None)
+        except Exception:
+            pass
+        return
 
     try:
         await callback.message.edit_reply_markup(reply_markup=None)
@@ -254,10 +273,30 @@ async def process_proof_done(callback: CallbackQuery, state: FSMContext, bot: Bo
     event_name = task.event.name
     worker_name = callback.from_user.full_name
 
-    # Vazifani bajarildi deb belgilash
-    await complete_task(task_id)
+    # Vazifani bajarildi deb belgilash (kim bajarganini ham saqlaymiz) — ATOMIK.
+    just_completed = await complete_task(task_id, callback.from_user.id)
+    if not just_completed:
+        # Bir vaqtda bosilgan — boshqa ishchi allaqachon bajargan.
+        # Bu ishchining isbot so'rovi va "Tayyor" tugmasini tozalab, to'xtaymiz
+        # (xabarlarni qayta tahrirlamaymiz, boshliqqa takror hisobot yubormaymiz).
+        if isbot_req_id:
+            try:
+                await bot.delete_message(chat_id=proof_chat_id, message_id=isbot_req_id)
+            except Exception:
+                pass
+        try:
+            await callback.message.delete()
+        except Exception:
+            pass
+        await callback.answer(
+            "Bu vazifa allaqachon boshqa ishchi tomonidan bajarilgan!", show_alert=True
+        )
+        await state.clear()
+        return
 
-    # Boshliqqa avval yuborilgan xabarni yangilash
+    # Shu vazifaga tegishli BARCHA xabarlarni yangilaymiz — ya'ni boshqa
+    # biriktirilgan ishchilar (B) va boshliqning xabarlari ham. Tugma yo'qoladi
+    # va "Bajardi: A" deb ko'rsatiladi.
     logs = await get_notification_logs(task_id)
     for log in logs:
         try:
@@ -265,7 +304,7 @@ async def process_proof_done(callback: CallbackQuery, state: FSMContext, bot: Bo
                 f"✅ <b>Vazifa Bajarildi!</b>\n\n"
                 f"🎉 Tadbir: <b>{event_name}</b>\n"
                 f"📌 Vazifa: <b>{task.description}</b>\n"
-                f"👤 Ishchi: <b>{worker_name}</b>\n"
+                f"👤 Bajardi: <b>{worker_name}</b>\n"
                 f"📊 Holati: ✅ Bajarildi"
             )
             await bot.edit_message_text(
@@ -273,7 +312,7 @@ async def process_proof_done(callback: CallbackQuery, state: FSMContext, bot: Bo
                 text=new_text, parse_mode="HTML"
             )
         except Exception as e:
-            print(f"Boshliq xabarini yangilashda xatolik: {e}")
+            print(f"Xabarni yangilashda xatolik: {e}")
 
     await delete_notification_logs(task_id)
 

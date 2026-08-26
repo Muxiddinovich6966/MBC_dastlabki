@@ -5,7 +5,7 @@ from .models import Worker, Template, TemplateTask, WorkEvent, Task, Notificatio
 class TemplateTaskInline(admin.TabularInline):
     model = TemplateTask
     extra = 1
-    fields = ('description', 'days_before', 'hours_before', 'worker', 'instruction')
+    fields = ('description', 'days_before', 'hours_before', 'workers', 'instruction')
 
 
 @admin.register(Worker)
@@ -28,5 +28,6 @@ class WorkEventAdmin(admin.ModelAdmin):
 
 @admin.register(Task)
 class TaskAdmin(admin.ModelAdmin):
-    list_display = ('description', 'event', 'worker', 'deadline_date', 'status')
+    list_display = ('description', 'event', 'deadline_date', 'status', 'completed_by')
     list_filter = ('status',)
+    filter_horizontal = ('workers',)

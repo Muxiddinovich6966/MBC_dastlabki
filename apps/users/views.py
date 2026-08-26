@@ -11,6 +11,7 @@ from .models import User, UserProfile, UserPlan
 from apps.events.models import Event
 from apps.groups.models import Group
 from apps.messages_app.models import SendMessage
+from ..workers.models import TemplateTask
 
 
 @login_required(login_url='/login/')
@@ -31,8 +32,11 @@ def dashboard(request):
 @login_required(login_url='/login/')
 def users_list(request):
     """Barcha ro'yxatdan o'tgan foydalanuvchilar."""
+    from datetime import date
+
     search = request.GET.get('search', '')
     trips = request.GET.get('trips', '')
+    sub = request.GET.get('sub', '')
 
     users_qs = User.objects.filter(role='user').select_related('profile')
 
@@ -51,6 +55,18 @@ def users_list(request):
     elif trips == 'not_sent':
         users_qs = users_qs.filter(profile__sent_to_trips_at__isnull=True)
 
+    # Obuna holati bo'yicha filtr
+    today = date.today()
+    if sub == 'active':
+        # Kamida bitta faol (muddati tugamagan) obunasi bor
+        users_qs = users_qs.filter(plans__end_date__gte=today).distinct()
+    elif sub == 'expired':
+        # Obunasi bor, lekin hammasi tugagan (faol obunasi yo'q)
+        users_qs = users_qs.filter(plans__isnull=False).exclude(plans__end_date__gte=today).distinct()
+    elif sub == 'none':
+        # Umuman obunasi yo'q
+        users_qs = users_qs.filter(plans__isnull=True)
+
     users_qs = users_qs.order_by('-created_at')
 
     paginator = Paginator(users_qs, 20)
@@ -62,6 +78,7 @@ def users_list(request):
         'page_obj': page_obj,
         'search': search,
         'trips': trips,
+        'sub': sub,
         'total_count': users_qs.count(),
     })
 
@@ -102,6 +119,14 @@ def user_manual_add(request):
                 val = request.POST.get(key, '').strip()
                 if val:
                     setattr(profile, key, val)
+
+        # Rasm (ixtiyoriy) — yuklangan bo'lsa saqlaymiz
+        photo = request.FILES.get('photo')
+        if photo:
+            if (photo.content_type or '').startswith('image/'):
+                profile.photo = photo
+            else:
+                messages.warning(request, "Rasm yuklanmadi: faqat rasm fayli (jpg, png) qabul qilinadi.")
         profile.save()
 
         messages.success(
@@ -180,6 +205,67 @@ def user_photo_upload(request, pk):
     profile.save(update_fields=['photo'])
     messages.success(request, "Rasm saqlandi.")
     return redirect('user_detail', pk=pk)
+
+
+@login_required(login_url='/login/')
+def user_edit(request, pk):
+    """Mavjud foydalanuvchi anketasini tahrirlash.
+
+    Asosan eski bazadan ko'chirilgan CHALA ma'lumotlarni qo'lda to'ldirish uchun.
+    QR (unique_id / user_unique_code) ga TEGMAYDI — faqat profil maydonlari yangilanadi.
+    """
+    from .profile_fields import (
+        PROFILE_FIELDS, REGIONS, INDUSTRIES, TRIPS, LANGUAGES, normalize_phone,
+    )
+
+    user = get_object_or_404(User, pk=pk)
+    profile, _ = UserProfile.objects.get_or_create(user=user)
+
+    if request.method == 'POST':
+        phone_raw = request.POST.get('phone', '').strip()
+        if phone_raw:
+            profile.phone = normalize_phone(phone_raw)
+
+        # Anketa maydonlari — bo'sh kelsa ham yoziladi (admin tozalashi mumkin)
+        for f in PROFILE_FIELDS:
+            key = f['key']
+            if f['type'] == 'multi':
+                setattr(profile, key, request.POST.getlist(key))
+            else:
+                setattr(profile, key, request.POST.get(key, '').strip())
+
+        # Rasm (ixtiyoriy) — yangi yuklansa eskisini almashtiramiz
+        photo = request.FILES.get('photo')
+        if photo:
+            if not (photo.content_type or '').startswith('image/'):
+                messages.error(request, "Faqat rasm fayli yuklang (jpg, png).")
+                return redirect('user_edit', pk=pk)
+            if profile.photo:
+                profile.photo.delete(save=False)
+            profile.photo = photo
+
+        profile.save()
+
+        # Telefon o'zgargan bo'lsa user.tg_phone ni ham moslashtiramiz
+        if profile.phone and user.tg_phone != profile.phone:
+            user.tg_phone = profile.phone
+            user.save(update_fields=['tg_phone'])
+
+        messages.success(request, "Ma'lumotlar yangilandi.")
+        return redirect('user_detail', pk=pk)
+
+    # GET — joriy qiymatlar bilan forma
+    field_values = [{'f': f, 'value': getattr(profile, f['key'], '')} for f in PROFILE_FIELDS]
+
+    return render(request, 'users/edit.html', {
+        'user_obj': user,
+        'profile': profile,
+        'field_values': field_values,
+        'regions': REGIONS,
+        'industries': INDUSTRIES,
+        'trips': TRIPS,
+        'languages': LANGUAGES,
+    })
 
 
 @login_required(login_url='/login/')
@@ -439,3 +525,6 @@ def users_send_to_trips_bulk(request):
         'members': members,
         'count': len(members),
     })
+
+
+

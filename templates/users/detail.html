@@ -4,6 +4,7 @@
 {% block page_sub %}@{{ user_obj.tg_username|default:"—" }} — Telegram ID: {{ user_obj.tg_id }}{% endblock %}
 
 {% block topbar_actions %}
+<a href="{% url 'user_edit' user_obj.id %}" class="btn btn-secondary"><i class="fas fa-pen"></i> Tahrirlash</a>
 <button class="btn btn-primary" onclick="openModal('sendMsgModal')"><i class="fas fa-paper-plane"></i> Xabar yuborish</button>
 <a href="{% url 'user_send_to_trips' user_obj.id %}" class="btn btn-primary"
    onclick="if(!confirm('Bu foydalanuvchi ma\'lumoti Safarlar guruhiga yuborilsinmi?')) return false; this.innerHTML='<i class=\'fas fa-spinner fa-spin\'></i> Tekshirilmoqda...';">

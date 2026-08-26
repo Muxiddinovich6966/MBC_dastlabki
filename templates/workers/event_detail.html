@@ -15,7 +15,7 @@
 <div class="glass-panel">
     <div class="table-container">
         <table>
-            <thead><tr><th>Vazifa</th><th>Ishchi</th><th>Deadline</th><th>Holati</th></tr></thead>
+            <thead><tr><th>Vazifa</th><th>Ishchilar</th><th>Deadline</th><th>Holati</th></tr></thead>
             <tbody>
                 {% for t in tasks %}
                 <tr>
@@ -23,13 +23,14 @@
                         <strong>{{ t.description }}</strong>
                         {% if t.instruction %}<br><span style="color:var(--text-secondary); font-size:12px;">{{ t.instruction|truncatechars:60 }}</span>{% endif %}
                     </td>
-                    <td>{% if t.worker %}{{ t.worker.name }}{% else %}<span style="color:var(--text-secondary)">Belgilanmagan</span>{% endif %}</td>
+                    <td>{% for w in t.workers.all %}{{ w.name }}{% if not forloop.last %}, {% endif %}{% empty %}<span style="color:var(--text-secondary)">Belgilanmagan</span>{% endfor %}</td>
                     <td>
                         {{ t.deadline_date }}
                         {% if t.hours_before %}<br><span style="color:var(--text-secondary); font-size:12px;">{{ t.hours_before }} soat oldin</span>{% endif %}
                     </td>
                     <td>
                         {% if t.status == 'completed' %}<span class="badge badge-success">Bajarildi</span>
+                        {% if t.completed_by %}<br><span style="color:var(--text-secondary); font-size:12px;">{{ t.completed_by.name }} bajardi</span>{% endif %}
                         {% elif t.status == 'overdue' %}<span class="badge badge-danger">Kechikdi</span>
                         {% else %}<span class="badge badge-warning">Kutilmoqda</span>{% endif %}
                     </td>
