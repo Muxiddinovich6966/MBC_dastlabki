@@ -22,6 +22,7 @@ urlpatterns = [
     path('groups/', include('apps.groups.urls')),
     path('messages/', include('apps.messages_app.urls')),
     path('workers/', include('apps.workers.urls')),
+    path('trips/', include('apps.trips.urls')),
 ]
 
 if settings.DEBUG:

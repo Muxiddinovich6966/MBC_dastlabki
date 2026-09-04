@@ -155,12 +155,20 @@ def user_detail(request, pk):
     # Safarlar guruhiga yuborish tarixi (kim/qachon)
     trips_logs = profile.trips_send_logs.select_related('sent_by').all() if profile else []
 
+    # Platforma safarlari — foydalanuvchi haqiqatan borgan (Confirmed + to'liq to'langan)
+    # safarlar. Holat o'zgarsa avtomatik yangilanadi (alohida saqlanmaydi).
+    platform_trips = [
+        p for p in user.trip_participations.select_related('trip').order_by('-created_at')
+        if p.counts_as_went
+    ]
+
     return render(request, 'users/detail.html', {
         'user_obj': user,
         'profile': profile,
         'event_responses': event_responses,
         'plans': plans,
         'trips_logs': trips_logs,
+        'platform_trips': platform_trips,
     })
 
 

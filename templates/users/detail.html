@@ -107,7 +107,20 @@
                 <div><span style="color:var(--text-secondary); font-size:12px;">KOMPANIYADAGI MAQOMI</span><br><strong>{{ profile.company_role|default:"—" }}</strong></div>
                 <div><span style="color:var(--text-secondary); font-size:12px;">BIZNES MAQSADI</span><br><strong>{{ profile.goal|default:"—" }}</strong></div>
                 <div><span style="color:var(--text-secondary); font-size:12px;">KLUBGA QO'SHILGAN</span><br><strong>{{ profile.join_date|default:"—" }}</strong></div>
-                <div style="grid-column:1/3;"><span style="color:var(--text-secondary); font-size:12px;">SAFARLAR</span><br><strong>{% if profile.selected_trips %}{{ profile.selected_trips|join:", " }}{% else %}—{% endif %}</strong></div>
+                <div style="grid-column:1/3;">
+                    <span style="color:var(--text-secondary); font-size:12px;">SAFARLAR</span><br>
+                    <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; align-items:center;">
+                        {% for p in platform_trips %}
+                            <span class="badge badge-success" title="{{ p.trip.name }} — Confirmed, to'liq to'langan">
+                                <i class="fas fa-plane-departure"></i> {{ p.trip.trip_label }}
+                            </span>
+                        {% endfor %}
+                        {% for t in profile.selected_trips %}
+                            <span class="badge badge-info" title="Botda tanlangan">{{ t }}</span>
+                        {% endfor %}
+                        {% if not platform_trips and not profile.selected_trips %}<strong>—</strong>{% endif %}
+                    </div>
+                </div>
                 <div style="grid-column:1/3;"><span style="color:var(--text-secondary); font-size:12px;">TILLAR</span><br><strong>{% if profile.languages %}{{ profile.languages|join:", " }}{% else %}—{% endif %}</strong></div>
                 <div style="grid-column:1/3;"><span style="color:var(--text-secondary); font-size:12px;">QO'SHILISH SABABI</span><br><strong>{{ profile.reason|default:"—" }}</strong></div>
                 <div style="grid-column:1/3;"><span style="color:var(--text-secondary); font-size:12px;">QIYINCHILIKLAR</span><br><strong>{{ profile.problems|default:"—" }}</strong></div>

@@ -78,4 +78,36 @@
         </form>
     </div>
 </div>
+
+{% if confirm_overdue %}
+<div class="modal-overlay show" id="overdueConfirmModal">
+    <div class="modal">
+        <div class="modal-header">
+            <div class="modal-title"><i class="fas fa-triangle-exclamation" style="color:var(--danger)"></i> Muddati o'tgan vazifalar</div>
+        </div>
+        <form method="post">
+            {% csrf_token %}
+            <div class="modal-body">
+                <p style="margin-bottom:10px;">
+                    Bu shablonda <strong>{{ confirm_overdue }} ta vazifaning</strong> muddati
+                    tanlangan sanaga nisbatan <strong>allaqachon o'tib ketgan</strong>.
+                </p>
+                <p style="color:var(--text-secondary); font-size:13px;">
+                    Davom etsangiz, ular ishchiga <strong>1 kun (ertagacha) muhlat</strong> bilan
+                    yuboriladi. Boshliqqa "bajarmadi" xabari faqat ertaga ham bajarilmasa boradi.
+                </p>
+                <input type="hidden" name="name" value="{{ pending_form.name }}">
+                <input type="hidden" name="event_date" value="{{ pending_form.event_date }}">
+                <input type="hidden" name="event_time" value="{{ pending_form.event_time }}">
+                <input type="hidden" name="template" value="{{ pending_form.template }}">
+                <input type="hidden" name="confirm_overdue" value="yes">
+            </div>
+            <div class="modal-footer">
+                <a href="{% url 'work_events_list' %}" class="btn btn-secondary">Bekor qilish</a>
+                <button type="submit" class="btn btn-primary"><i class="fas fa-check"></i> Davom etish</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}
 {% endblock %}

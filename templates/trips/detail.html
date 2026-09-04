@@ -1,0 +1,280 @@
+{% extends 'base.html' %}
+{% block title %}{{ trip.name }}{% endblock %}
+{% block page_title %}{{ trip.name }}{% endblock %}
+{% block page_sub %}{% if trip.country %}<i class="fas fa-map-marker-alt"></i> {{ trip.country }} · {% endif %}Safar to'lovlari jadvali · {{ participants.count }} ta qator{% endblock %}
+
+{% block topbar_actions %}
+<a href="{% url 'trips_list' %}" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> Safarlar</a>
+<button class="btn btn-secondary" onclick="openModal('addUsersModal')"><i class="fas fa-user-plus"></i> Foydalanuvchidan</button>
+<form method="post" action="{% url 'trip_participant_add' trip.id %}" style="display:inline;">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-primary"><i class="fas fa-plus"></i> Qo'lda qator</button>
+</form>
+{% endblock %}
+
+{% block content %}
+<div class="glass-panel">
+    <div class="table-container">
+        <table class="sheet" id="sheet">
+            <thead>
+                <tr>
+                    <th>№</th>
+                    <th>Statusi</th>
+                    <th>F.I.O.</th>
+                    <th>Safarga borish</th>
+                    <th>Yillik podpiska</th>
+                    <th>Vxodnoy summasi</th>
+                    <th>Safar summasi</th>
+                    <th>Berishi kerak</th>
+                    <th>Omonatdan</th>
+                    <th>Berdi</th>
+                    <th>Qoldiq</th>
+                    <th>To'lov</th>
+                    <th title="Profilga 'bordi' deb yozilsin">Bordi</th>
+                    <th>Kommentariya</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in participants %}
+                <tr data-pid="{{ p.id }}">
+                    <td class="rownum">{{ forloop.counter }}</td>
+
+                    {# Statusi #}
+                    <td>
+                        <select class="cell cell-select col-status" data-field="status" data-val="{{ p.status }}">
+                            <option value="">—</option>
+                            {% for val, label in status_choices %}
+                            <option value="{{ val }}" {% if p.status == val %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </td>
+
+                    {# F.I.O. #}
+                    <td><input class="cell cell-text" data-field="full_name" value="{{ p.full_name }}" placeholder="Ism familiya"></td>
+
+                    {# Safarga borish #}
+                    <td>
+                        <select class="cell cell-select col-travel" data-field="travel_status" data-val="{{ p.travel_status }}">
+                            <option value="">—</option>
+                            {% for val, label in travel_choices %}
+                            <option value="{{ val }}" {% if p.travel_status == val %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </td>
+
+                    {# Yillik podpiska #}
+                    <td>
+                        <select class="cell cell-select col-sub" data-field="subscription" data-val="{{ p.subscription }}">
+                            <option value="">—</option>
+                            {% for val, label in sub_choices %}
+                            <option value="{{ val }}" {% if p.subscription == val %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </td>
+
+                    {# Vxodnoy summasi #}
+                    <td><input class="cell cell-num" data-field="entry_sum" inputmode="numeric" value="{{ p.entry_sum }}"></td>
+                    {# Safar summasi #}
+                    <td><input class="cell cell-num" data-field="trip_sum" inputmode="numeric" value="{{ p.trip_sum }}"></td>
+                    {# Berishi kerak (hisoblangan) #}
+                    <td class="calc calc-mustpay">{{ p.must_pay }}</td>
+                    {# Omonatdan #}
+                    <td><input class="cell cell-num" data-field="deposit" inputmode="numeric" value="{{ p.deposit }}"></td>
+                    {# Berdi #}
+                    <td><input class="cell cell-num" data-field="paid" inputmode="numeric" value="{{ p.paid }}"></td>
+                    {# Qoldiq (hisoblangan) #}
+                    <td class="calc calc-remaining">{{ p.remaining }}</td>
+
+                    {# To'lov #}
+                    <td>
+                        <select class="cell cell-select col-pay" data-field="payment_status" data-val="{{ p.payment_status }}">
+                            <option value="">—</option>
+                            {% for val, label in payment_choices %}
+                            <option value="{{ val }}" {% if p.payment_status == val %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </td>
+
+
+                                        {# Bordi (profilga yozilsin) #}
+                    <td style="text-align:center;">
+                        <input type="checkbox" class="cell-check" data-field="went"
+                               {% if p.went %}checked{% endif %}
+                               style="width:18px; height:18px; accent-color:var(--success); cursor:pointer;">
+
+                    </td>
+                    {# Kommentariya #}
+                    <td class="comment-cell"><textarea class="cell cell-comment" data-field="comment" rows="1" placeholder="Izoh...">{{ p.comment }}</textarea></td>
+
+                    <td class="rowdel">
+                        <button class="btn btn-danger btn-sm btn-icon" title="Qatorni o'chirish" onclick="deleteRow({{ p.id }}, this)"><i class="fas fa-trash"></i></button>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr id="emptyRow"><td colspan="15"><div class="empty-state"><i class="fas fa-table"></i><p>Jadval bo'sh. "Foydalanuvchidan" yoki "Qo'lda qator" bilan qator qo'shing.</p></div></td></tr>
+                {% endfor %}
+            </tbody>
+            <tfoot>
+                <tr class="totals-row">
+                    <td></td>
+                    <td colspan="4" style="text-align:right; font-weight:700;">JAMI:</td>
+                    <td id="tot-entry">{{ totals.entry }}</td>
+                    <td id="tot-trip">{{ totals.trip_s }}</td>
+                    <td id="tot-mustpay" class="calc">{{ totals.must_pay }}</td>
+                    <td id="tot-deposit">{{ totals.deposit }}</td>
+                    <td id="tot-paid">{{ totals.paid }}</td>
+                    <td id="tot-remaining" class="calc">{{ totals.remaining }}</td>
+                    <td colspan="4"></td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+    <p style="margin-top:12px; color:var(--text-secondary); font-size:12px;">
+        <i class="fas fa-circle-info"></i> O'zgarishlar avtomatik saqlanadi. "Berishi kerak" va "Qoldiq" o'zi hisoblanadi.
+    </p>
+</div>
+
+{# ===== Foydalanuvchidan qo'shish modal ===== #}
+<div class="modal-overlay" id="addUsersModal">
+    <div class="modal">
+        <div class="modal-header">
+            <div class="modal-title">Foydalanuvchidan qo'shish</div>
+            <button class="modal-close" onclick="closeModal('addUsersModal')">&times;</button>
+        </div>
+        <form method="post" action="{% url 'trip_participant_add' trip.id %}">
+            {% csrf_token %}
+            <div class="modal-body">
+                <input type="text" class="form-control" id="userFilter" placeholder="Qidirish..." onkeyup="filterUsers()" style="margin-bottom:10px;">
+                <div style="max-height:360px; overflow-y:auto; border:1px solid var(--border); border-radius:10px;">
+                    {% for u in available_users %}
+                    <label class="user-pick" data-name="{{ u.full_name|lower }} {{ u.tg_username|lower }} {{ u.tg_phone|lower }}">
+                        <input type="checkbox" name="user_ids" value="{{ u.id }}">
+                        <span>{{ u.profile.name|default:u.tg_username|default:"—" }} {{ u.profile.surname }}
+                            <small style="color:var(--text-secondary);">{{ u.tg_phone|default:"" }}</small>
+                        </span>
+                    </label>
+                    {% empty %}
+                    <div class="empty-state" style="padding:20px;"><p>Barcha foydalanuvchilar allaqachon qo'shilgan.</p></div>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('addUsersModal')">Bekor qilish</button>
+                <button type="submit" class="btn btn-primary"><i class="fas fa-plus"></i> Tanlanganlarni qo'shish</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const UPDATE_URL = "/trips/participant/PID/update/";
+    const DEL_URL = "/trips/participant/PID/delete/";
+    const CSRF = "{{ csrf_token }}";
+
+    function fmt(n){ return (parseInt(n,10)||0).toLocaleString('ru-RU').replace(/,/g,' '); }
+
+    // Boshlang'ich: hisoblangan kataklar va statuslarni chiroyli ko'rsatamiz
+    document.querySelectorAll('.calc').forEach(el => el.textContent = fmt(el.textContent));
+    document.querySelectorAll('.cell-select').forEach(s => s.dataset.val = s.value);
+
+    async function saveCell(pid, field, value, cell){
+        cell.classList.remove('cell-error');
+        cell.classList.add('cell-saving');
+        try{
+            const res = await fetch(UPDATE_URL.replace('PID', pid), {
+                method:'POST',
+                headers:{'Content-Type':'application/json','X-CSRFToken':CSRF,'X-Requested-With':'XMLHttpRequest'},
+                body: JSON.stringify({field, value})
+            });
+            const data = await res.json();
+            if(!res.ok || !data.ok){ throw new Error(data.error || 'Xato'); }
+
+            // Qator hisoblangan kataklarini yangilaymiz
+            const row = cell.closest('tr');
+            row.querySelector('.calc-mustpay').textContent = fmt(data.must_pay);
+            row.querySelector('.calc-remaining').textContent = fmt(data.remaining);
+            // Umumiy jami
+            const t = data.totals;
+            document.getElementById('tot-entry').textContent = fmt(t.entry);
+            document.getElementById('tot-trip').textContent = fmt(t.trip_s);
+            document.getElementById('tot-mustpay').textContent = fmt(t.must_pay);
+            document.getElementById('tot-deposit').textContent = fmt(t.deposit);
+            document.getElementById('tot-paid').textContent = fmt(t.paid);
+            document.getElementById('tot-remaining').textContent = fmt(t.remaining);
+
+            cell.classList.remove('cell-saving');
+            cell.classList.add('cell-saved');
+            setTimeout(()=>cell.classList.remove('cell-saved'), 700);
+        }catch(err){
+            cell.classList.remove('cell-saving');
+            cell.classList.add('cell-error');
+            cell.title = err.message;
+        }
+    }
+
+    // Matn/raqam inputlari va kommentariya (textarea) — o'zgarganda saqlaymiz
+    document.querySelectorAll('input.cell, textarea.cell').forEach(inp => {
+        inp.addEventListener('change', () => {
+            const pid = inp.closest('tr').dataset.pid;
+            saveCell(pid, inp.dataset.field, inp.value, inp);
+        });
+        if(inp.tagName === 'INPUT'){
+            // Enter bosilsa saqlash (textarea da Enter = yangi qator, tegmaymiz)
+            inp.addEventListener('keydown', e => { if(e.key === 'Enter'){ inp.blur(); } });
+        }
+    });
+
+    // Kommentariya textarea'sini matnga qarab avtomatik o'stiramiz
+    function autoGrow(ta){ ta.style.height = 'auto'; ta.style.height = (ta.scrollHeight) + 'px'; }
+    document.querySelectorAll('textarea.cell').forEach(ta => {
+        autoGrow(ta);
+        ta.addEventListener('input', () => autoGrow(ta));
+    });
+
+
+    // "Bordi" checkbox - belgilanganda darrov saqlanadi
+    document.querySelectorAll('input.cell-check').forEach(chk =>{
+      chk.addEventListener('change',() =>{
+          const pid = chk.closest('tr').dataset.pid;
+          saveCell(pid,chk.dataset.field,chk.checked,chk);
+      });
+
+    });
+
+    // Select (rangli) — o'zgarganda darrov saqlaymiz + rangini yangilaymiz
+    document.querySelectorAll('select.cell').forEach(sel => {
+        sel.addEventListener('change', () => {
+            sel.dataset.val = sel.value;
+            const pid = sel.closest('tr').dataset.pid;
+            saveCell(pid, sel.dataset.field, sel.value, sel);
+        });
+    });
+
+    async function deleteRow(pid, btn){
+        if(!confirm("Qator o'chirilsinmi?")) return;
+        const res = await fetch(DEL_URL.replace('PID', pid), {
+            method:'POST',
+            headers:{'X-CSRFToken':CSRF,'X-Requested-With':'XMLHttpRequest'}
+        });
+        if(res.ok){
+            btn.closest('tr').remove();
+            renumber();
+        }
+    }
+    function renumber(){
+        document.querySelectorAll('#sheet tbody tr').forEach((tr,i)=>{
+            const n = tr.querySelector('.rownum'); if(n) n.textContent = i+1;
+        });
+    }
+
+    function filterUsers(){
+        const q = document.getElementById('userFilter').value.toLowerCase();
+        document.querySelectorAll('.user-pick').forEach(l=>{
+            l.style.display = l.dataset.name.includes(q) ? '' : 'none';
+        });
+    }
+</script>
+{% endblock %}

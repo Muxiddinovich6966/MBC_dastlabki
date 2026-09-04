@@ -24,9 +24,16 @@ def _create_tasks_from_template(work_event, template):
     biriktirilgan bo'lsa, hammasi shu bitta Task ga bog'lanadi. Ulardan biri
     bajarsa — vazifa hamma uchun 'Bajarildi' bo'ladi.
     """
+    today = datetime.now().date()
     created_tasks = []
     for tt in template.tasks.all():
         deadline = _compute_deadline(work_event.event_date, tt.days_before, tt.when)
+        # Muddati allaqachon o'tib ketgan bo'lsa — ishchiga 1 kun muhlat beramiz
+        # (deadline = ertaga). Shunda boshliqqa darrov "bajarmadi" yolg'on signali
+        # ketmaydi; scheduler faqat ertaga ham bajarilmasa xabar beradi.
+        overdue_grace = deadline < today
+        if overdue_grace:
+            deadline = today + timedelta(days=1)
         task = Task.objects.create(
             event=work_event,
             description=tt.description,
@@ -37,8 +44,20 @@ def _create_tasks_from_template(work_event, template):
             instruction=tt.instruction,
         )
         task.workers.set(tt.workers.all())
+        # _notify_new_tasks ishchiga xabar berishda ishlatadi (bazaga yozilmaydi)
+        task._overdue_grace = overdue_grace
         created_tasks.append(task)
     return created_tasks
+
+
+def _count_overdue_template_tasks(template, event_date):
+    """Tadbir shu sanada yaratilsa, shablonda deadline'i allaqachon o'tib ketgan
+    nechta vazifa borligini qaytaradi (saytdagi ogohlantirish uchun)."""
+    today = datetime.now().date()
+    return sum(
+        1 for tt in template.tasks.all()
+        if _compute_deadline(event_date, tt.days_before, tt.when) < today
+    )
 
 @login_required(login_url='/login/')
 def workers_list(request):
@@ -96,6 +115,10 @@ def template_detail(request,pk):
     workers = Worker.objects.filter(role__in=['worker','boss'])
 
     if request.method == 'POST':
+        selected_workers = request.POST.getlist('workers')
+        if not selected_workers:
+            messages.error(request, "Iltimos, kamida bitta ishchi tanlang.")
+            return redirect('template_detail', pk=template.pk)
         task = TemplateTask.objects.create(
             template=template,
             description=request.POST.get('description'),
@@ -104,7 +127,7 @@ def template_detail(request,pk):
             hours_before=request.POST.get('hours_before') or None,
             instruction=request.POST.get('instruction',''),
         )
-        task.workers.set(request.POST.getlist('workers'))
+        task.workers.set(selected_workers)
         messages.success(request,"Vazifa shablonga qo'shildi.")
         return redirect('template_detail',pk=template.pk)
 
@@ -131,13 +154,17 @@ def template_task_edit(request, pk):
     workers = Worker.objects.filter(role__in=['worker','boss'])
 
     if request.method == 'POST':
+        selected_workers = request.POST.getlist('workers')
+        if not selected_workers:
+            messages.error(request, "Iltimos, kamida bitta ishchi tanlang.")
+            return redirect('template_task_edit', pk=task.pk)
         task.description = request.POST.get('description')
         task.days_before = request.POST.get('days_before')
         task.when = request.POST.get('when','before')
         task.hours_before = request.POST.get('hours_before') or None
         task.instruction = request.POST.get('instruction','')
         task.save()
-        task.workers.set(request.POST.getlist('workers'))
+        task.workers.set(selected_workers)
         messages.success(request,"Vazifa yangilandi.")
         return redirect('template_detail',pk=task.template.pk)
 
@@ -177,10 +204,31 @@ def work_events_list(request):
             messages.error(request, "Iltimos, tadbir vaqtini (soatini) kiriting.")
             return redirect('work_events_list')
 
+        name = request.POST.get('name')
+        event_date = request.POST.get('event_date')
         template_id = request.POST.get('template') or None
+        confirmed = request.POST.get('confirm_overdue') == 'yes'
+
+        # Shablonda muddati allaqachon o'tib ketgan vazifalar bo'lsa — avval
+        # saytda ogohlantirib, admin tasdig'ini so'raymiz (hali yaratmaymiz).
+        if template_id and not confirmed:
+            template = Template.objects.get(pk=template_id)
+            overdue_count = _count_overdue_template_tasks(template, event_date)
+            if overdue_count:
+                return render(request, 'workers/events_list.html', {
+                    'work_events': WorkEvent.objects.select_related('template')
+                        .prefetch_related('tasks').order_by('-event_date'),
+                    'templates': Template.objects.all(),
+                    'confirm_overdue': overdue_count,
+                    'pending_form': {
+                        'name': name, 'event_date': event_date,
+                        'event_time': event_time, 'template': template_id,
+                    },
+                })
+
         work_event = WorkEvent.objects.create(
-            name=request.POST.get('name'),
-            event_date=request.POST.get('event_date'),
+            name=name,
+            event_date=event_date,
             event_time=event_time,
             template_id=template_id,
         )
@@ -238,6 +286,7 @@ def _notify_new_tasks(work_event, tasks, is_update=False):
                 worker.telegram_id, work_event.name, event_date_str,
                 task.description, deadline_str, task.days_before, task.id,
                 is_update=is_update,
+                overdue_grace=getattr(task, '_overdue_grace', False),
             )
             if w_msg_id:
                 NotificationLog.objects.create(

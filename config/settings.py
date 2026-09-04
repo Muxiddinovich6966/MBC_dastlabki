@@ -35,6 +35,7 @@ INSTALLED_APPS = [
     'apps.groups',
     'apps.messages_app',
     'apps.workers',
+    'apps.trips',
 ]
 
 MIDDLEWARE = [

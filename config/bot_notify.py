@@ -440,10 +440,12 @@ def send_subscription_warning(user_tg_id, end_date,days_left):
         return False
 
 
-def send_worker_task(worker_tg_id, event_name, event_date, task_description, deadline_date, days_before, task_id, is_update=False):
+def send_worker_task(worker_tg_id, event_name, event_date, task_description, deadline_date, days_before, task_id, is_update=False, overdue_grace=False):
     """Ishchiga vazifa xabari (ishchilar boti tokeni bilan).
 
     is_update=True bo'lsa — 'yangi vazifa' emas, 'tadbir o'zgardi' deb yuboradi.
+    overdue_grace=True bo'lsa — vazifa muddati o'tib ketgan holda yaratilgan,
+    ishchiga 1 kun (ertagacha) muhlat berilganini eslatamiz.
     """
     token = settings.WORKER_BOT_TOKEN
     if not token:
@@ -456,12 +458,18 @@ def send_worker_task(worker_tg_id, event_name, event_date, task_description, dea
         )
     else:
         header = "🎉 <b>Sizga yangi tadbir va vazifa biriktirildi!</b>\n\n"
+    grace_note = (
+        "\n\n⚠️ <b>Bu vazifaning asl muddati o'tib ketgan.</b>\n"
+        "Sizga 1 kun — <b>ertagacha</b> muhlat berildi. Iltimos, kechiktirmang!"
+        if overdue_grace else ""
+    )
     text = (
         header +
         f"🎉 Tadbir: <b>{event_name}</b>\n"
         f"📅 Sana: {event_date}\n\n"
         f"📌 Vazifa: {task_description}\n"
         f"⏳ Qachongacha: {deadline_date}"
+        + grace_note
     )
     keyboard = {
         "inline_keyboard": [[

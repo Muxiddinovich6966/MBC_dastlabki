@@ -184,6 +184,12 @@ async def process_task_done(callback: CallbackQuery, state: FSMContext):
         )
         await callback.answer()
     else:
+        # Instruksiya yo'q — "Bajardim" tugmasini darrov olib tashlaymiz,
+        # so'ng isbot so'raymiz (tugma isbot/Tayyorni kutib turmaydi).
+        try:
+            await callback.message.edit_reply_markup(reply_markup=None)
+        except Exception:
+            pass
         await state.update_data(
             proof_task_id=task_id,
             proof_original_message_id=callback.message.message_id,

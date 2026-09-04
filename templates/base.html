@@ -54,6 +54,11 @@
                 </a>
             </li>
             <li>
+                <a href="{% url 'trips_list' %}" class="nav-link {% if 'trip' in request.resolver_match.url_name %}active{% endif %}">
+                    <i class="fas fa-plane-departure"></i> Safarlar
+                </a>
+            </li>
+            <li>
                 <a href="{% url 'messages_list' %}" class="nav-link {% if 'message' in request.resolver_match.url_name %}active{% endif %}">
                     <i class="fas fa-paper-plane"></i> Xabarlar
                 </a>

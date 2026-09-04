@@ -1,0 +1,128 @@
+{% extends 'base.html' %}
+{% block title %}Safarlar{% endblock %}
+{% block page_title %}Safarlar{% endblock %}
+{% block page_sub %}To'lovlarni kuzatish jadvallari. Jami {{ trips.count }} ta safar{% endblock %}
+
+{% block topbar_actions %}
+<button class="btn btn-primary" onclick="openModal('addTripModal')"><i class="fas fa-plus"></i> Yangi safar</button>
+{% endblock %}
+
+{% block content %}
+<div class="glass-panel">
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Safar nomi</th>
+                    <th>Qatnashuvchilar</th>
+                    <th>Izoh</th>
+                    <th>Yaratilgan</th>
+                    <th style="text-align:right;">Amallar</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for t in trips %}
+                <tr style="cursor:pointer;" onclick="window.location='{% url 'trip_detail' t.id %}'">
+                    <td>
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <div class="avatar-sm"><i class="fas fa-plane-departure" style="font-size:13px;"></i></div>
+                            <strong>{{ t.name }}</strong>
+                        </div>
+                    </td>
+                    <td><span class="badge badge-info">{{ t.participants.count }} ta</span></td>
+                    <td style="color:var(--text-secondary);">
+                        {% if t.country %}<div style="margin-bottom:4px;"><span class="badge badge-info"><i class="fas fa-map-marker-alt" style="font-size:11px;"></i> {{ t.country }}</span></div>{% endif %}
+                        <div>{{ t.note|default:"—" }}</div>
+                    </td>
+                    <td style="color:var(--text-muted); font-size:12px;">{{ t.created_at|date:"d.m.Y" }}</td>
+                    <td onclick="event.stopPropagation();">
+                        <div style="display:flex; gap:5px; justify-content:flex-end;">
+                            <a href="{% url 'trip_detail' t.id %}" class="btn btn-secondary btn-sm btn-icon" title="Ochish"><i class="fas fa-table"></i></a>
+                            <form method="post" action="{% url 'trip_delete' t.id %}" onsubmit="return confirm('Safar va uning barcha qatorlari o\'chirilsinmi?')" style="display:inline;">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-danger btn-sm btn-icon" title="O'chirish"><i class="fas fa-trash"></i></button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5"><div class="empty-state"><i class="fas fa-plane-slash"></i><p>Hozircha safarlar yo'q. "Yangi safar" tugmasi bilan qo'shing.</p></div></td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="modal-overlay" id="addTripModal">
+    <div class="modal">
+        <div class="modal-header">
+            <div class="modal-title">Yangi safar</div>
+            <button class="modal-close" onclick="closeModal('addTripModal')">&times;</button>
+        </div>
+        <form method="post" id="tripForm" onsubmit="return prepareTrip()">
+            {% csrf_token %}
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Davlat / yo'nalish</label>
+                    <select id="countrySelect" class="form-control" onchange="onCountryChange()">
+                        <option value="">— Tanlang —</option>
+                        {% for c in countries %}<option value="{{ c.name }}">{{ c.name }}</option>{% endfor %}
+                        <option value="__new__">➕ Yangi davlat kiritish...</option>
+                    </select>
+                    <input type="text" id="newCountry" class="form-control" placeholder="Yangi davlat nomi" style="display:none; margin-top:8px;">
+                    <input type="hidden" name="country" id="countryHidden">
+                    <input type="hidden" name="add_country" id="addCountryHidden" value="no">
+                    <small style="color:var(--text-secondary); font-size:12px;">Ro'yxatdan tanlang. Bu nom foydalanuvchi profilidagi "Safarlar"ga yoziladi (Confirmed + to'liq to'langanda).</small>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Safar nomi <span style="color:var(--text-muted); font-weight:400;">(ixtiyoriy)</span></label>
+                    <input type="text" name="name" class="form-control" placeholder="Bo'sh qoldirsangiz davlat nomi ishlatiladi">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Izoh (ixtiyoriy)</label>
+                    <input type="text" name="note" class="form-control" placeholder="Qisqa izoh">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('addTripModal')">Bekor qilish</button>
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Yaratish</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function onCountryChange(){
+        var sel = document.getElementById('countrySelect');
+        var nc = document.getElementById('newCountry');
+        var isNew = sel.value === '__new__';
+        nc.style.display = isNew ? 'block' : 'none';
+        if(isNew){ nc.focus(); }
+    }
+
+    // Saqlashdan oldin: yangi davlat bo'lsa tasdiq so'raymiz
+    function prepareTrip(){
+        var sel = document.getElementById('countrySelect');
+        var nc = document.getElementById('newCountry');
+        var hidden = document.getElementById('countryHidden');
+        var addH = document.getElementById('addCountryHidden');
+
+        if(sel.value === '__new__'){
+            var v = (nc.value || '').trim();
+            hidden.value = v;
+            if(v){
+                addH.value = confirm("'" + v + "' — bu yangi davlat. Bazaga qo'shib qo'yaylikmi?\nKeyingi safar yaratganda ham ro'yxatda chiqadi.")
+                    ? 'yes' : 'no';
+            } else {
+                addH.value = 'no';
+            }
+        } else {
+            hidden.value = sel.value;   // bazadagi mavjud davlat (yoki bo'sh)
+            addH.value = 'no';
+        }
+        return true;
+    }
+</script>
+{% endblock %}

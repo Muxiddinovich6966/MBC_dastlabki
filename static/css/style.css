@@ -734,4 +734,131 @@ html, body { max-width: 100%; overflow-x: hidden; }
     /* Topbar tugmalari qulay bosilishi uchun kengroq */
     .topbar-actions .btn { flex: 1; justify-content: center; }
     th, td { padding: 10px 12px; }
+
+    /* Safarlar jadvali telefonda "kartochka" bo'lmaydi — yonga suriladi (spreadsheet) */
+    .table-container table.sheet,
+    .table-container table.sheet thead,
+    .table-container table.sheet tbody,
+    .table-container table.sheet tfoot,
+    .table-container table.sheet tr,
+    .table-container table.sheet td { display: revert; width: auto; }
+    .table-container table.sheet { display: table; width: max-content; }
+    .table-container table.sheet thead { display: table-header-group; }
+    .table-container table.sheet tr { display: table-row; background: transparent; border: none; border-radius: 0; padding: 0; margin: 0; }
+    .table-container table.sheet td { display: table-cell; border: none; border-bottom: 1px solid var(--border); }
 }
+
+/* ============ SAFARLAR JADVALI (Google Sheets uslubi) ============ */
+table.sheet {
+    border-collapse: separate; border-spacing: 0;
+    width: max-content; min-width: 100%;
+    border-radius: 14px; overflow: hidden;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.25);
+}
+table.sheet th, table.sheet td {
+    border-right: 1px solid rgba(255,255,255,0.05);
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    padding: 0; text-align: center; white-space: nowrap; vertical-align: middle;
+}
+table.sheet th:last-child, table.sheet td:last-child { border-right: none; }
+
+/* Rangli, yopishib turuvchi (sticky) sarlavha */
+table.sheet thead th {
+    position: sticky; top: 0; z-index: 3;
+    background: linear-gradient(180deg, #5b53e0, #4f46b8);
+    color: #eceafe; font-weight: 700; font-size: 11.5px;
+    text-transform: none; letter-spacing: 0.3px;
+    padding: 12px 12px; white-space: nowrap;
+    border-right: 1px solid rgba(255,255,255,0.12);
+    border-bottom: none;
+}
+
+/* Qatorlar: zebra + hover */
+table.sheet tbody tr:nth-child(even) td { background: rgba(255,255,255,0.015); }
+table.sheet tbody tr:hover td { background: rgba(99,102,241,0.08); }
+table.sheet td.rownum { padding: 6px 12px; color: var(--text-muted); font-size: 12px; font-weight: 700; }
+table.sheet td.rowdel { padding: 4px 8px; }
+
+/* Tahrirlanadigan kataklar */
+.cell {
+    width: 100%; border: none; background: transparent; color: var(--text-primary);
+    font: inherit; font-size: 13px; padding: 10px 12px; outline: none;
+    transition: background 0.15s;
+}
+.cell::placeholder { color: var(--text-muted); }
+.cell-text { text-align: left; min-width: 160px; }
+.cell-num { text-align: right; min-width: 92px; }
+.cell:focus { background: rgba(99,102,241,0.14); box-shadow: inset 0 0 0 2px var(--border-hover); }
+.cell-saving { background: rgba(245,158,11,0.12) !important; }
+.cell-saved  { background: rgba(34,197,94,0.18) !important; }
+.cell-error  { background: rgba(239,68,68,0.20) !important; box-shadow: inset 0 0 0 2px var(--danger); }
+
+/* Kommentariya — o'sib boruvchi, o'raladigan (uzun matn ko'rinadi) */
+table.sheet td.comment-cell { white-space: normal; vertical-align: top; }
+.cell-comment {
+    display: block; text-align: left; min-width: 240px; max-width: 340px;
+    resize: none; overflow: hidden; line-height: 1.45; white-space: pre-wrap;
+    word-break: break-word; font-family: inherit; min-height: 40px;
+}
+
+/* Hisoblangan (o'zi chiqadigan) kataklar */
+table.sheet td.calc { padding: 10px 14px; text-align: right; font-weight: 700; color: #cbd5e1; background: rgba(255,255,255,0.03); font-size: 13px; }
+table.sheet tfoot .totals-row td {
+    position: sticky; bottom: 0; z-index: 2;
+    padding: 12px 14px; text-align: right; font-weight: 800; font-size: 13px; color: #fff;
+    background: linear-gradient(180deg, #2a2550, #211d44);
+    border-top: 2px solid var(--border-hover); border-bottom: none;
+}
+
+/* Rangli status "pill" dropdownlari (Google Sheets kabi dumaloq chip) */
+table.sheet td:has(> .cell-select) { padding: 5px 8px; }
+.cell-select {
+    width: auto; max-width: 100%; border: none; color: var(--text-secondary);
+    font: inherit; font-size: 12px; font-weight: 700; padding: 6px 16px; outline: none;
+    cursor: pointer; text-align: center; text-align-last: center;
+    border-radius: 999px; background: rgba(255,255,255,0.06);
+    -webkit-appearance: none; appearance: none;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+    transition: transform 0.12s, box-shadow 0.12s;
+}
+.cell-select:hover { transform: translateY(-1px); box-shadow: 0 3px 8px rgba(0,0,0,0.25); }
+.cell-select option { background: var(--bg-card); color: var(--text-primary); font-weight: 600; }
+.cell-select:focus { box-shadow: 0 0 0 2px var(--border-hover); }
+/* rang tanlanganda oq matn (och fonlilar pastda qora qilib qaytariladi) */
+.cell-select[data-val]:not([data-val=""]) { color: #fff; }
+
+/* Statusi */
+.col-status[data-val="mlp"]      { background:#c0392b; }
+.col-status[data-val="mbc"]      { background:#2563eb; }
+.col-status[data-val="yangi"]    { background:#16a34a; }
+.col-status[data-val="org_team"] { background:#7c3aed; }
+.col-status[data-val="pul_ilmi"] { background:#a7e0b5; color:#12351f !important; }
+.col-status[data-val="mehmon"]   { background:#e6d3a3; color:#3a2f10 !important; }
+.col-status[data-val="speaker"]  { background:#0f766e; }
+
+/* Safarga borish */
+.col-travel[data-val="confirmed"] { background:#16a34a; }
+.col-travel[data-val="80_20"]     { background:#bcd7f5; color:#14324f !important; }
+.col-travel[data-val="50_50"]     { background:#f4e08a; color:#3a3110 !important; }
+.col-travel[data-val="declined"]  { background:#dc2626; }
+.col-travel[data-val="self"]      { background:#a7e0b5; color:#12351f !important; }
+.col-travel[data-val="51_49"]     { background:#bcd7f5; color:#14324f !important; }
+
+/* Yillik podpiska */
+.col-sub[data-val="bor"]   { background:#16a34a; }
+.col-sub[data-val="yoq"]   { background:#dc2626; }
+.col-sub[data-val="kelib"] { background:#f4e08a; color:#3a3110 !important; }
+
+/* To'lov */
+.col-pay[data-val="berdi"]     { background:#16a34a; }
+.col-pay[data-val="avans"]     { background:#a7e0b5; color:#12351f !important; }
+.col-pay[data-val="kutilmoqda"]{ background:#f4e08a; color:#3a3110 !important; }
+.col-pay[data-val="otkaz"]     { background:#dc2626; }
+.col-pay[data-val="self"]      { background:#f4c39a; color:#3a2410 !important; }
+.col-pay[data-val="omonatdan"] { background:#2563eb; }
+.col-pay[data-val="rasxod"]    { background:#7c3aed; }
+
+/* Foydalanuvchi tanlash modalidagi qatorlar */
+.user-pick { display:flex; align-items:center; gap:10px; padding:9px 12px; cursor:pointer; border-bottom:1px solid var(--border); font-size:14px; }
+.user-pick:hover { background: rgba(255,255,255,0.03); }
+.user-pick input { width:16px; height:16px; }
