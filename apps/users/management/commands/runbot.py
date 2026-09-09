@@ -47,7 +47,7 @@ INDUSTRIES = [
 ]
 TRIPS = [
     'Phi Phi', 'Maldiv orollari', 'Seyshel', 'Shri Lanka', 'Bali-Kuala Lumpur',
-    'Fukok', 'Qatar', 'Sharm-el-Sheyx', 'Nyachang', 'Trabzon','Lombok','Langkawi','Xitoy (Avatar tog\'lari)'
+    'Fukok', 'Qatar', 'Sharm-el-Sheyx', 'Nyachang', 'Trabzon','Lombok','Langkawi','Xitoy (Avatar tog\'lari)','Phuket (Tailand)'
 ]
 LANGUAGES = [
     "O'zbek tili", 'Ingliz tili', 'Rus tili', 'Arab tili', 'Tojik tili',
