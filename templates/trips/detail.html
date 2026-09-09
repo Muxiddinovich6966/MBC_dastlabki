@@ -32,6 +32,7 @@
                     <th>To'lov</th>
                     <th title="Profilga 'bordi' deb yozilsin">Bordi</th>
                     <th>Kommentariya</th>
+                    <th>Eslatma vaqti</th>
                     <th></th>
                 </tr>
             </thead>
@@ -106,6 +107,14 @@
                     </td>
                     {# Kommentariya #}
                     <td class="comment-cell"><textarea class="cell cell-comment" data-field="comment" rows="1" placeholder="Izoh...">{{ p.comment }}</textarea></td>
+                    <td>
+                        <input
+                            type="datetime-local"
+                            class="cell cell-text"
+                            data-field="follow_up_at"
+                            value="{% if p.follow_up_at %}{{ p.follow_up_at|date:'Y-m-d\TH:i' }}{% endif %}"
+                        >
+                    </td>
 
                     <td class="rowdel">
                         <button class="btn btn-danger btn-sm btn-icon" title="Qatorni o'chirish" onclick="deleteRow({{ p.id }}, this)"><i class="fas fa-trash"></i></button>

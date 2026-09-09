@@ -131,6 +131,7 @@ class Lead(models.Model):
     STATUS_CHOICES = [
         ('new', 'Yangi'),
         ('contacted', "Bog'lanildi"),
+        ('follow_up', "Qayta aloqaga chiqish"),
         ('thinking', "O'ylayapti"),
         ('joined', "Mijoz bo'ldi"),
         ('rejected', 'Rad etdi'),
@@ -143,6 +144,7 @@ class Lead(models.Model):
 
     status = models.CharField(max_length=16, choices=STATUS_CHOICES, default='new', verbose_name="Holat")
     status_changed_at = models.DateTimeField(null=True, blank=True, verbose_name="Holat o'zgargan vaqt")
+    follow_up_at = models.DateTimeField(null=True, blank=True, verbose_name= "Qayta aloqa eslatmasi")
 
     created_at = models.DateTimeField(auto_now_add=True)
 

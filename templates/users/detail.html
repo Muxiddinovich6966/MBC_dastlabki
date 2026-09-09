@@ -118,7 +118,9 @@
                         {% for t in profile.selected_trips %}
                             <span class="badge badge-info" title="Botda tanlangan">{{ t }}</span>
                         {% endfor %}
-                        {% if not platform_trips and not profile.selected_trips %}<strong>—</strong>{% endif %}
+                        {% if not platform_trips and not profile.selected_trips %}
+                             <strong>Hali sayohatga chiqmagan</strong>
+                        {% endif %}
                     </div>
                 </div>
                 <div style="grid-column:1/3;"><span style="color:var(--text-secondary); font-size:12px;">TILLAR</span><br><strong>{% if profile.languages %}{{ profile.languages|join:", " }}{% else %}—{% endif %}</strong></div>

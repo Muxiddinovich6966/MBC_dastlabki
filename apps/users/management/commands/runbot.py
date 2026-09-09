@@ -47,7 +47,7 @@ INDUSTRIES = [
 ]
 TRIPS = [
     'Phi Phi', 'Maldiv orollari', 'Seyshel', 'Shri Lanka', 'Bali-Kuala Lumpur',
-    'Fukok', 'Qatar', 'Sharm-el-Sheyx', 'Nyachang', 'Trabzon','Lombok','Langkawi','Xitoy (Avatar tog\'lari)','Phuket (Tailand)'
+    'Fukok', 'Qatar', 'Sharm-el-Sheyx', 'Nyachang', 'Trabzon','Lombok','Langkawi','Xitoy (Avatar tog\'lari)','Phuket (Tailand)',
 ]
 LANGUAGES = [
     "O'zbek tili", 'Ingliz tili', 'Rus tili', 'Arab tili', 'Tojik tili',
@@ -275,12 +275,15 @@ def dyn_yesno_kb(options):
     ]])
 
 
-def dyn_multi_kb(options, selected):
+def dyn_multi_kb(options, selected, skip_label=None):
     rows = []
     for i, x in enumerate(options):
         mark = "✅ " if i in selected else ""
         rows.append([InlineKeyboardButton(text=f"{mark}{x}", callback_data=f"f:m:{i}")])
-    rows.append([InlineKeyboardButton(text="✅ Tasdiqlash", callback_data="f:m:done")])
+    bottom = [InlineKeyboardButton(text="✅ Tasdiqlash", callback_data="f:m:done")]
+    if skip_label:
+        bottom.insert(0, InlineKeyboardButton(text=skip_label, callback_data="f:m:skip"))
+    rows.append(bottom)
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -297,8 +300,8 @@ async def send_field_prompt(target, state, key):
         await target.answer(f['prompt'], reply_markup=dyn_yesno_kb(f['options']))
     elif t == 'multi':
         await state.update_data(multi_sel=[])
-        await target.answer(f['prompt'], reply_markup=dyn_multi_kb(f['options'], set()))
-    await state.set_state(Reg.filling)
+        skip = "🚫 Hali bormaganman" if f['key'] == 'selected_trips' else None
+        await target.answer(f['prompt'], reply_markup=dyn_multi_kb(f['options'], set(), skip_label=skip))
 
 
 async def store_and_advance(target, state, value):
@@ -380,6 +383,7 @@ def register_handlers(dp: Dispatcher):
         await message.answer(
             f"Rahmat! Ro'yxatni yakunlash uchun yana {len(info['missing'])} ta savolga javob bering.",
             reply_markup=ReplyKeyboardRemove())
+        await state.set_state(Reg.filling)
         await send_field_prompt(message, state, info['missing'][0])
 
     @dp.message(F.text == "❌ Bekor qilish")
@@ -447,6 +451,11 @@ def register_handlers(dp: Dispatcher):
             await store_and_advance(cb.message, state, 'yes' if parts[2] == 'yes' else 'no')
         elif kind == 'm':  # ko'p tanlov (safarlar/tillar)
             sel = set(data.get('multi_sel', []))
+            if parts[2] == 'skip':
+                await cb.answer("Qabul qilindi ✅")
+                await cb.message.edit_reply_markup(reply_markup=None)
+                await store_and_advance(cb.message, state, [])
+                return
             if parts[2] == 'done':
                 chosen = [f['options'][i] for i in sorted(sel)]
                 await cb.answer("Qabul qilindi ✅")

@@ -5,6 +5,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
 from .models import Event, UserEvent, Venue, EventSendLog, Lead, LeadStatusLog
 from apps.groups.models import Group
@@ -604,36 +605,68 @@ def leads_list(request):
 
 @login_required(login_url='/login/')
 def lead_change_status(request, pk):
-    """Lead holatini o'zgartiradi va o'zgarishni tarixga (LeadStatusLog) yozadi."""
     lead = get_object_or_404(Lead, pk=pk)
 
     if request.method == 'POST':
         new_status = request.POST.get('status', '').strip()
         note = request.POST.get('note', '').strip()
+        follow_up_raw = request.POST.get('follow_up_at', '').strip()
         valid = dict(Lead.STATUS_CHOICES)
+
         if new_status not in valid:
             messages.error(request, "Noto'g'ri holat tanlandi.")
-        elif new_status == lead.status:
-            messages.info(request, "Holat o'zgarmadi (avvalgi bilan bir xil).")
         else:
-            old_status = lead.status
-            LeadStatusLog.objects.create(
-                lead=lead,
-                old_status=old_status,
-                new_status=new_status,
-                changed_by=request.user.get_username(),
-                note=note,
-            )
+            follow_up_at = None
+
+            if new_status == 'follow_up':
+                parsed = parse_datetime(follow_up_raw)
+
+                if not parsed:
+                    messages.error(
+                        request,
+                        "Qayta aloqa uchun sana va vaqtni kiriting."
+                    )
+                    return redirect('leads_list')
+
+                if timezone.is_naive(parsed):
+                    parsed = timezone.make_aware(
+                        parsed,
+                        timezone.get_current_timezone()
+                    )
+
+                follow_up_at = parsed
+
+            if new_status != lead.status:
+                LeadStatusLog.objects.create(
+                    lead=lead,
+                    old_status=lead.status,
+                    new_status=new_status,
+                    changed_by=request.user.get_username(),
+                    note=note,
+                )
+                lead.status_changed_at = timezone.now()
+
             lead.status = new_status
-            lead.status_changed_at = timezone.now()
-            lead.save(update_fields=['status', 'status_changed_at'])
-            messages.success(request, f"Holat yangilandi: {valid[new_status]}")
+            lead.follow_up_at = follow_up_at
+            lead.save(
+                update_fields=[
+                    'status',
+                    'status_changed_at',
+                    'follow_up_at',
+                ]
+            )
+
+            messages.success(
+                request,
+                f"Holat yangilandi: {valid[new_status]}"
+            )
 
     next_url = request.POST.get('next') or request.GET.get('next')
+
     if next_url == 'checkin':
         return redirect('event_checkin', pk=lead.event_id)
-    return redirect('leads_list')
 
+    return redirect('leads_list')
 
 @login_required(login_url='/login/')
 def lead_delete(request, pk):

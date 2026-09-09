@@ -56,6 +56,12 @@
                     </td>
                     <td>
                         <span class="badge {{ lead.status_badge_class }}">{{ lead.get_status_display }}</span>
+                        {% if lead.status == 'follow_up' and lead.follow_up_at %}
+                        <div style="color:#f87171; font-size:11px; margin-top:4px;">
+                             <i class="fas fa-bell"></i>
+                             {{ lead.follow_up_at|date:"d.m.Y H:i" }}
+                        </div>
+                        {% endif %}
                         {% if lead.status_changed_at %}
                         <div style="color:var(--text-muted); font-size:11px; margin-top:2px;">{{ lead.status_changed_at|date:"d.m.Y H:i" }}</div>
                         {% endif %}
@@ -87,6 +93,20 @@
                                     <option value="{{ val }}" {% if val == lead.status %}selected{% endif %}>{{ label }}</option>
                                     {% endfor %}
                                 </select>
+                                <label class="form-label" style="margin-top:8px; display:block;">
+                                    Eslatma sana-vaqti
+                                </label>
+
+                                <input
+                                    type="datetime-local"
+                                    name="follow_up_at"
+                                    class="form-control"
+                                    value="{% if lead.follow_up_at %}{{ lead.follow_up_at|date:'Y-m-d\TH:i' }}{% endif %}"
+                                >
+
+                                <small style="color:var(--text-muted); display:block; margin-top:4px;">
+                                    Faqat “Qayta aloqaga chiqish” holatida majburiy.
+                                </small>
                                 <input type="text" name="note" class="form-control" placeholder="Izoh (ixtiyoriy)" style="margin-top:8px;">
                                 <button type="submit" class="btn btn-primary btn-sm" style="margin-top:10px;"><i class="fas fa-save"></i> Saqlash</button>
                             </form>

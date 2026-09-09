@@ -8,7 +8,9 @@ from django.db.models import Q
 from django.core.paginator import Paginator
 
 from .models import User, UserProfile, UserPlan
-from apps.events.models import Event
+from apps.events.models import Event, Lead
+from apps.trips.models import TripParticipant
+from django.utils import timezone
 from apps.groups.models import Group
 from apps.messages_app.models import SendMessage
 from ..workers.models import TemplateTask
@@ -16,7 +18,47 @@ from ..workers.models import TemplateTask
 
 @login_required(login_url='/login/')
 def dashboard(request):
-    """Bosh sahifa — umumiy statistika va so'nggi ma'lumotlar."""
+    now = timezone.now()
+
+    due_reminders = []
+
+    leads = (
+        Lead.objects
+        .filter(status='follow_up', follow_up_at__lte=now)
+        .select_related('event')
+        .order_by('follow_up_at')
+    )
+
+    for lead in leads:
+        due_reminders.append({
+            'kind': 'Lead',
+            'name': lead.full_name,
+            'detail': f"{lead.event.name} · {lead.phone}",
+            'when': lead.follow_up_at,
+            'url': '/events/leads/',
+        })
+
+    participants = (
+        TripParticipant.objects
+        .filter(
+            travel_status='follow_up',
+            follow_up_at__lte=now
+        )
+        .select_related('trip')
+        .order_by('follow_up_at')
+    )
+
+    for participant in participants:
+        due_reminders.append({
+            'kind': 'Safar',
+            'name': participant.display_name,
+            'detail': participant.trip.name,
+            'when': participant.follow_up_at,
+            'url': f'/trips/{participant.trip_id}/',
+        })
+
+    due_reminders.sort(key=lambda item: item['when'])
+
     context = {
         'users_count': User.objects.filter(role='user').count(),
         'events_count': Event.objects.count(),
@@ -25,7 +67,9 @@ def dashboard(request):
         'recent_users': User.objects.filter(role='user').select_related('profile').order_by('-created_at')[:5],
         'recent_events': Event.objects.order_by('-created_at')[:5],
         'upcoming_events': Event.objects.filter(is_active=True, sent=False).order_by('date')[:5],
+        'due_reminders': due_reminders,
     }
+
     return render(request, 'dashboard/index.html', context)
 
 

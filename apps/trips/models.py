@@ -72,6 +72,7 @@ class TripParticipant(models.Model):
         ('declined', 'Declined'),
         ('self', 'Self'),
         ('51_49', '51/49'),
+        ('follow_up', "Qayta aloqaga chiqish"),
     ]
 
     # Yillik podpiska
@@ -109,6 +110,7 @@ class TripParticipant(models.Model):
     paid = models.BigIntegerField(default=0, verbose_name="Berdi")
 
     comment = models.TextField(blank=True, verbose_name="Kommentariya")
+    follow_up_at = models.DateTimeField(null=True,blank=True, verbose_name="Qayta aloqaga eslatmasi")
     went = models.BooleanField(default=False, verbose_name="Bordi")
 
     order = models.IntegerField(default=0, verbose_name="Tartib")

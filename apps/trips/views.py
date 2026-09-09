@@ -3,6 +3,8 @@ Safarlar: safarlar ro'yxati va Google Sheets uslubidagi jadval.
 Jadvaldagi har bir katak o'zgarganda AJAX orqali avtomatik saqlanadi.
 """
 import json
+from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
@@ -19,6 +21,7 @@ from apps.users.models import User
 # Jadvalda AJAX orqali tahrirlash mumkin bo'lgan maydonlar
 TEXT_FIELDS = {'full_name', 'comment'}
 NUMBER_FIELDS = {'entry_sum', 'trip_sum', 'deposit', 'paid'}
+DATETIME_FIELDS = {'follow_up_at'}
 CHOICE_FIELDS = {
 
     'status': dict(TripParticipant.STATUS_CHOICES),
@@ -175,6 +178,27 @@ def participant_update(request, pk):
         setattr(p, field, value or '')
     elif field in BOOL_FIELDS:
         setattr(p,field,bool(value))
+    elif field in DATETIME_FIELDS:
+        raw = str(value or '').strip()
+
+        if not raw:
+            setattr(p, field, None)
+        else:
+            parsed = parse_datetime(raw)
+
+            if not parsed:
+                return JsonResponse(
+                    {'ok': False, 'error': "Sana-vaqt noto'g'ri."},
+                    status=400
+                )
+
+            if timezone.is_naive(parsed):
+                parsed = timezone.make_aware(
+                    parsed,
+                    timezone.get_current_timezone()
+                )
+
+            setattr(p, field, parsed)
     else:
         return JsonResponse({'ok': False, 'error': "Bu maydonni tahrirlab bo'lmaydi."}, status=400)
 
