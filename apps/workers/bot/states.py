@@ -12,7 +12,8 @@ class ProofState(StatesGroup):
 
 class BossTaskState(StatesGroup):
     """Boshliq bot orqali ishchiga vazifa biriktirish oqimi."""
-    waiting_for_text = State()          # vazifa matni
+    waiting_for_text = State()          # vazifa matni (yozma yoki ovozli)
+    confirming_text = State()           # ovozdan chiqqan matnni tasdiqlash/tuzatish
     waiting_for_worker = State()        # ishchini tanlash (inline)
     waiting_for_deadline = State()      # deadline tanlash (inline/kalendar)
     waiting_for_manual_date = State()   # deadline'ni qo'lda yozish

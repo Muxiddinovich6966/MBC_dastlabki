@@ -76,6 +76,15 @@ def bt_workers_kb(workers):
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+def bt_confirm_text_kb():
+    """Ovozdan matn chiqarilgach: tasdiqlash / qayta yozish."""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✅ To'g'ri, davom", callback_data="bt_txt:ok")],
+        [InlineKeyboardButton(text="✏️ Qayta (matn yoki ovoz)", callback_data="bt_txt:redo")],
+        [InlineKeyboardButton(text="✖️ Bekor qilish", callback_data="bt_cancel")],
+    ])
+
+
 def bt_deadline_kb():
     """Deadline tanlash: tez tugmalar + kalendar + qo'lda."""
     return InlineKeyboardMarkup(inline_keyboard=[

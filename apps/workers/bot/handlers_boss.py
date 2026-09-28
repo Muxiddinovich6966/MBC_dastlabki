@@ -7,6 +7,7 @@ Bu vazifalar tadbirga bog'lanmaydi va guruh check-listiga tushmaydi (event=None,
 Ishchiga "👔 Boshliqdan topshiriq" banneri bilan darrov boradi.
 📜 Tarix → boshliq kim vaqtida/kechikib bajargan yoki bajarmaganini ko'radi (statistika bilan).
 """
+import html
 from datetime import date, datetime, timedelta
 
 from aiogram import Router, F, Bot
@@ -17,6 +18,7 @@ from asgiref.sync import sync_to_async
 from .states import BossTaskState
 from . import keyboards as kb
 from .keyboards import _UZ_MONTHS
+from config.transcribe import transcribe_voice
 
 router = Router()
 
@@ -95,36 +97,64 @@ def build_history(boss_id, year=None, month=None):
             return 'missed'
         return 'pending'
 
-    STAT = {'ontime': '✅ vaqtida', 'late': '⏰ kechikdi',
-            'missed': '❌ bajarilmadi', 'pending': '⏳ kutilmoqda'}
+    ICON = {'ontime': '✅', 'late': '⏰', 'missed': '❌', 'pending': '⏳'}
 
-    counts = {'ontime': 0, 'late': 0, 'missed': 0, 'pending': 0}
+    overall = {'ontime': 0, 'late': 0, 'missed': 0, 'pending': 0}
     groups = OrderedDict()
     for t in tasks:
         c = classify(t)
-        counts[c] += 1
         wname = ", ".join(w.name for w in t.workers.all()) or '—'
         groups.setdefault(wname, []).append((t, c))
 
-    title = f"{_UZ_MONTHS[month - 1]} {year}" if (year and month) else "Barcha oylar"
-    lines = [f"📜 <b>Tarix — {title}</b>\n"]
+    def pct_of(counts):
+        # Ishlash foizi = vaqtida / (vaqtida + kechikkan + bajarilmagan).
+        # "kutilmoqda" (muddati kelmagan) hisobga olinmaydi. None = hali baholanmadi.
+        base = counts['ontime'] + counts['late'] + counts['missed']
+        return round(counts['ontime'] / base * 100) if base else None
 
-    for wname, items in groups.items():
-        lines.append(f"👤 <b>{wname}</b>")
-        for i, (t, c) in enumerate(items, 1):
+    def counts_line(counts):
+        return (f"✅ {counts['ontime']}   ⏰ {counts['late']}   "
+                f"❌ {counts['missed']}   ⏳ {counts['pending']}")
+
+    title = f"{_UZ_MONTHS[month - 1]} {year}" if (year and month) else "Barcha oylar"
+    lines = [
+        f"📜 <b>TARIX — {title.upper()}</b>",
+        "<i>🗓 muddat → bajarilgan sana</i>",
+        "━━━━━━━━━━━━━━━━━━",
+        "",
+    ]
+
+    worker_list = list(groups.items())
+    for idx, (wname, items) in enumerate(worker_list):
+        wc = {'ontime': 0, 'late': 0, 'missed': 0, 'pending': 0}
+        task_lines = []
+        for t, c in items:
+            wc[c] += 1
+            overall[c] += 1
             dl = t.deadline_date.strftime('%d/%m')
             done = timezone.localtime(t.completed_at).strftime('%d/%m') if t.completed_at else '—'
-            lines.append(f"{i}. {t.description} — {STAT[c]}")
-            lines.append(f"      ⏳ deadline: {dl}")
-            lines.append(f"      ✅ bajarildi: {done}")
-        lines.append("")
+            task_lines.append(f"{ICON[c]} <b>{t.description}</b>")
+            task_lines.append(f"      🗓 {dl} → {done}")
 
-    finished = counts['ontime'] + counts['late']
-    pct = round(counts['ontime'] / finished * 100) if finished else 0
-    lines.append(
-        f"📊 Vaqtida: <b>{counts['ontime']}/{finished}</b> ({pct}%)  |  "
-        f"❌ {counts['missed']}  ⏳ {counts['pending']}"
-    )
+        p = pct_of(wc)
+        rate = f"📊 <b>{p}%</b>" if p is not None else "📊 <i>hali baholanmadi</i>"
+        lines.append(f"👤 <b>{wname}</b>    {rate}")
+        lines.append(counts_line(wc))
+        lines.append("")
+        lines.extend(task_lines)
+
+        # Ishchilar orasiga ajratuvchi (oxirgisidan keyin qo'yilmaydi)
+        if idx < len(worker_list) - 1:
+            lines.append("")
+            lines.append("┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈")
+            lines.append("")
+
+    if len(groups) > 1:
+        p = pct_of(overall)
+        lines.append("")
+        lines.append("━━━━━━━━━━━━━━━━━━")
+        lines.append(f"📈 <b>UMUMIY:  {p}%</b>" if p is not None else "📈 <b>UMUMIY</b>")
+        lines.append(counts_line(overall))
     return "\n".join(lines)
 
 
@@ -148,12 +178,65 @@ async def bt_start(message: Message, state: FSMContext):
     await state.clear()
     await state.set_state(BossTaskState.waiting_for_text)
     await message.answer(
-        "➕ <b>Yangi vazifa</b>\n\nVazifa matnini yuboring:",
+        "➕ <b>Yangi vazifa</b>\n\n"
+        "Vazifa matnini yozing yoki 🎤 <b>ovozli xabar</b> yuboring "
+        "(bot uni matnga aylantiradi).",
         parse_mode="HTML"
     )
 
 
-@router.message(BossTaskState.waiting_for_text)
+async def _ask_worker(message: Message, state: FSMContext, text: str):
+    """Matn tayyor — ishchi tanlash bosqichiga o'tadi."""
+    workers = await get_assignable_workers()
+    if not workers:
+        await state.clear()
+        await message.answer("Hozircha biriktiriladigan ishchi yo'q (Telegram ID li).")
+        return
+    await state.update_data(text=text)
+    await state.set_state(BossTaskState.waiting_for_worker)
+    await message.answer(
+        f"📌 Vazifa: <b>{html.escape(text)}</b>\n\nKimga biriktiramiz?",
+        parse_mode="HTML", reply_markup=kb.bt_workers_kb(workers)
+    )
+
+
+async def _handle_voice(message: Message, state: FSMContext, bot: Bot):
+    """Ovozli xabarni matnga aylantirib, tasdiqlash uchun ko'rsatadi."""
+    voice = message.voice or message.audio
+    if not voice:
+        return
+    status = await message.answer("⏳ Ovoz matnga aylantirilmoqda...")
+    ok, result = await transcribe_voice(bot, voice.file_id)
+    try:
+        await status.delete()
+    except Exception:
+        pass
+    if not ok:
+        await message.answer(
+            f"❌ Ovozni matnga aylantirib bo'lmadi ({result}).\n\n"
+            "Qayta ovoz yuboring yoki vazifa matnini yozib yuboring."
+        )
+        return
+    await state.update_data(text=result)
+    await state.set_state(BossTaskState.confirming_text)
+    esc = html.escape(result)
+    await message.answer(
+        "🎤➡️📝 <b>Ovozdan olingan matn:</b>\n\n"
+        f"<b>{esc}</b>\n\n"
+        "✅ To'g'ri bo'lsa — «To'g'ri, davom» tugmasini bosing.\n"
+        "✏️ Xato bo'lsa — pastdagi matnni <b>bosib nusxalang</b>, xato harflarni "
+        "to'g'rilab qayta yuboring (yoki klaviaturada yangidan yozing):\n\n"
+        f"<code>{esc}</code>",
+        parse_mode="HTML", reply_markup=kb.bt_confirm_text_kb()
+    )
+
+
+@router.message(BossTaskState.waiting_for_text, F.voice | F.audio)
+async def bt_got_voice(message: Message, state: FSMContext, bot: Bot):
+    await _handle_voice(message, state, bot)
+
+
+@router.message(BossTaskState.waiting_for_text, F.text)
 async def bt_got_text(message: Message, state: FSMContext):
     text = (message.text or '').strip()
     # Menyu tugmasi bosildi — joriy oqimni bekor qilib, o'sha amalga o'tamiz
@@ -163,19 +246,56 @@ async def bt_got_text(message: Message, state: FSMContext):
             return await bt_start(message, state)
         return await bt_history(message, state)
     if not text:
-        await message.answer("Iltimos, vazifa matnini yozing.")
+        await message.answer("Iltimos, vazifa matnini yozing yoki ovoz yuboring.")
         return
-    workers = await get_assignable_workers()
-    if not workers:
+    await _ask_worker(message, state, text)
+
+
+# ─────────── Ovozdan chiqqan matnni tasdiqlash / tuzatish ───────────
+@router.callback_query(BossTaskState.confirming_text, F.data == "bt_txt:ok")
+async def bt_txt_ok(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    text = (data.get('text') or '').strip()
+    if not text:
+        await callback.answer("Matn topilmadi, qayta yuboring.", show_alert=True)
+        return
+    await callback.answer()
+    await _ask_worker(callback.message, state, text)
+
+
+@router.callback_query(BossTaskState.confirming_text, F.data == "bt_txt:redo")
+async def bt_txt_redo(callback: CallbackQuery, state: FSMContext):
+    await state.set_state(BossTaskState.waiting_for_text)
+    data = await state.get_data()
+    text = (data.get('text') or '').strip()
+    await callback.answer()
+    prompt = ("✏️ Tuzatib qayta yuboring — quyidagi matnni <b>bosib nusxalang</b>, "
+              "xato harflarni to'g'rilab jo'nating (yoki klaviaturada yangidan yozing):")
+    if text:
+        prompt += f"\n\n<code>{html.escape(text)}</code>"
+    try:
+        await callback.message.edit_text(prompt, parse_mode="HTML")
+    except Exception:
+        await callback.message.answer(prompt, parse_mode="HTML")
+
+
+@router.message(BossTaskState.confirming_text, F.voice | F.audio)
+async def bt_confirm_voice(message: Message, state: FSMContext, bot: Bot):
+    await _handle_voice(message, state, bot)
+
+
+@router.message(BossTaskState.confirming_text, F.text)
+async def bt_confirm_text_edit(message: Message, state: FSMContext):
+    """Tasdiqlash bosqichida matn yozilsa — uni tuzatilgan yakuniy matn deb qabul qiladi."""
+    text = (message.text or '').strip()
+    if text in MENU_BUTTONS:
         await state.clear()
-        await message.answer("Hozircha biriktiriladigan ishchi yo'q (Telegram ID li).")
+        if text == "➕ Vazifa qo'shish":
+            return await bt_start(message, state)
+        return await bt_history(message, state)
+    if not text:
         return
-    await state.update_data(text=text)
-    await state.set_state(BossTaskState.waiting_for_worker)
-    await message.answer(
-        f"📌 Vazifa: <b>{text}</b>\n\nKimga biriktiramiz?",
-        parse_mode="HTML", reply_markup=kb.bt_workers_kb(workers)
-    )
+    await _ask_worker(message, state, text)
 
 
 # ─────────── Ishchi tanlandi ───────────
@@ -291,15 +411,16 @@ async def _finalize(event, state: FSMContext, bot: Bot, deadline_date):
         text, worker_id, deadline_date, boss.id
     )
     dl_str = deadline_date.strftime('%d.%m.%Y')
+    esc_text = html.escape(text)
 
     # Ishchiga darrov — "Boshliqdan topshiriq" banneri bilan
     delivered = False
     if worker_tg:
         worker_msg = (
             "👔 <b>BOSHLIQDAN SHAXSIY TOPSHIRIQ</b>\n"
-            f"📨 Yubordi: <b>{boss.name}</b>\n"
+            f"📨 Yubordi: <b>{html.escape(boss.name)}</b>\n"
             "━━━━━━━━━━━━━━━━━━\n"
-            f"📌 <b>Vazifa:</b> {text}\n"
+            f"📌 <b>Vazifa:</b> {esc_text}\n"
             f"⏳ <b>Muddat:</b> {dl_str}"
         )
         try:
@@ -316,8 +437,8 @@ async def _finalize(event, state: FSMContext, bot: Bot, deadline_date):
 
     confirm = (
         "✅ <b>Vazifa biriktirildi!</b>\n\n"
-        f"👤 Ishchi: <b>{worker_name}</b>\n"
-        f"📌 Vazifa: <b>{text}</b>\n"
+        f"👤 Ishchi: <b>{html.escape(worker_name)}</b>\n"
+        f"📌 Vazifa: <b>{esc_text}</b>\n"
         f"⏳ Muddat: <b>{dl_str}</b>\n\n"
         + ("📨 Ishchiga yuborildi." if delivered
            else "⚠️ Ishchiga yuborilmadi (Telegram ID topilmadi yoki bloklagan).")

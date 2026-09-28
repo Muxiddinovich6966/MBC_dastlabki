@@ -116,6 +116,9 @@ WORKER_BOT_TOKEN = os.getenv('WORKER_BOT_TOKEN', '')
 TRIPS_GROUP_ID= os.getenv('TRIPS_GROUP_ID', '')
 WORK_GROUP_ID = os.getenv('WORK_GROUP_ID', '')
 
+# Ovozli xabarni matnga aylantirish (Groq Whisper) — tekin: https://console.groq.com
+GROQ_API_KEY = os.getenv('GROQ_API_KEY', '')
+
 # Guruhga begona a'zo qo'shilganda xabar oladigan adminlarning Telegram ID lari.
 # .env da vergul bilan ajratib yoziladi, masalan: ADMIN_IDS=123456789,987654321
 # Bu ID lar bazadagi role='admin' foydalanuvchilar bilan birga ishlatiladi.
