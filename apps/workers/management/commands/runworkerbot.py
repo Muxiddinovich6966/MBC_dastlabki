@@ -16,6 +16,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 
 from apps.workers.bot import keyboards as kb
 from apps.workers.bot.handlers_worker import router as worker_router
+from apps.workers.bot.handlers_boss import router as boss_router
 
 
 start_router = Router()
@@ -40,8 +41,11 @@ async def cmd_start(message: Message):
     elif role in ('boss', 'admin'):
         await message.answer(
             f"Assalomu alaykum, {name}! 👔\n\n"
-            f"Siz {'boshliq' if role == 'boss' else 'admin'} sifatida ro'yxatdasiz.\n"
-            f"Vazifa bajarilganda sizga hisobot keladi."
+            f"Siz {'boshliq' if role == 'boss' else 'admin'} sifatida ro'yxatdasiz.\n\n"
+            f"➕ <b>Vazifa qo'shish</b> — ishchiga to'g'ridan-to'g'ri topshiriq berish\n"
+            f"📜 <b>Tarix</b> — kim vaqtida bajardi/bajarmadi\n\n"
+            f"Vazifa bajarilganda sizga hisobot ham keladi.",
+            parse_mode="HTML", reply_markup=kb.boss_main_kb()
         )
     else:
         await message.answer(
@@ -68,6 +72,7 @@ class Command(BaseCommand):
             bot = Bot(token=token)
             dp = Dispatcher(storage=MemoryStorage())
             dp.include_router(start_router)
+            dp.include_router(boss_router)
             dp.include_router(worker_router)
             await bot.delete_webhook(drop_pending_updates=True)
             self.stdout.write(self.style.SUCCESS("Ishchilar boti ishga tushdi..."))

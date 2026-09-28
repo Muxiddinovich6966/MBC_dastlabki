@@ -178,12 +178,13 @@ def job_delayed_tasks():
     for task in delayed:
         task_workers = list(task.workers.all())
         worker_name = ", ".join(w.name for w in task_workers) if task_workers else "Noma'lum"
+        ev_name = task.event.name if task.event else "👔 Boshliq topshirig'i"
 
         # 1. Boshliq va adminga xabar
         boss_text = (
             "⚠️ <b>DIQQAT! Ishchi quyidagi vazifani vaqtida bajarmadi!</b>\n\n"
             f"🧑‍🔧 Ishchi: <b>{worker_name}</b>\n"
-            f"🎉 Tadbir: <b>{task.event.name}</b>\n"
+            f"🎉 Tadbir: <b>{ev_name}</b>\n"
             f"📌 Vazifa: <b>{task.description}</b>\n"
             f"📅 Kechikkan sana: <b>{task.deadline_date}</b>"
         )
@@ -196,7 +197,7 @@ def job_delayed_tasks():
         # 2. Har bir biriktirilgan ishchiga ogohlantirish (Bajardim tugmasi yo'q)
         worker_text = (
             "⚠️ <b>DIQQAT!</b> Siz quyidagi vazifani vaqtida bajarmadingiz!\n\n"
-            f"🎉 Tadbir: <b>{task.event.name}</b>\n"
+            f"🎉 Tadbir: <b>{ev_name}</b>\n"
             f"📌 Vazifa: <b>{task.description}</b>\n"
             f"📅 Kechikkan sana: <b>{task.deadline_date}</b>\n\n"
             "Iltimos, tezroq bajaring! \"📝 Aktiv vazifalar\" bo'limidan topishingiz mumkin."
@@ -232,18 +233,30 @@ def job_upcoming_deadlines():
         if not task_workers:
             continue
         hours_str = f" ({task.hours_before} soat oldin)" if task.hours_before else ""
-        text = (
-            "⏰ <b>Eslatma!</b> Bugun vazifa muddati!\n\n"
-            f"🎉 Tadbir: <b>{task.event.name}</b>\n"
-            f"📌 Vazifa: <b>{task.description}</b>\n"
-            f"⏳ Deadline: <b>{task.deadline_date}</b>{hours_str}\n\n"
-            "Iltimos, bugun bajarishni unutmang!"
-        )
+        is_boss = task.source == 'boss' or task.event is None
+        head = "👔 <b>Boshliq topshirig'i — bugun muddati!</b>" if is_boss else "📌 <b>Bugungi vazifangiz</b>"
+        ev_line = "" if is_boss else f"🎉 Tadbir: <b>{task.event.name}</b>\n"
         keyboard = {"inline_keyboard": [[
             {"text": "✅ Bajardim", "callback_data": f"we_done_{task.id}"}
         ]]}
         sent_any = False
         for worker in task_workers:
+            # Vazifa bir nechta ishchiga biriktirilgan bo'lsa — hamkasblarni ko'rsatamiz.
+            co_names = [w.name for w in task_workers if w.pk != worker.pk]
+            shared_note = ""
+            if co_names:
+                shared_note = (
+                    f"👥 Bu vazifa <b>sizga va {', '.join(co_names)}</b> ga biriktirilgan.\n"
+                    f"<i>Biringiz bajarsangiz kifoya.</i>\n\n"
+                )
+            text = (
+                f"{head}\n\n"
+                f"{ev_line}"
+                f"📌 Vazifa: <b>{task.description}</b>\n"
+                f"⏳ Deadline: <b>{task.deadline_date}</b>{hours_str}\n\n"
+                f"{shared_note}"
+                "Iltimos, bugun bajarishni unutmang!"
+            )
             try:
                 send_worker_bot_message(
                     worker.telegram_id, text,
@@ -291,18 +304,26 @@ def job_event_time_reminders():
             if not task_workers:
                 continue
             event_time_str = event.event_time.strftime('%H:%M') if hasattr(event.event_time, 'strftime') else str(event.event_time)
-            text = (
-                "🔔 <b>Diqqat!</b> Tadbir 2 soatdan keyin boshlanadi!\n\n"
-                f"🎉 Tadbir: <b>{event.name}</b>\n"
-                f"🕐 Tadbir vaqti: <b>{event_time_str}</b>\n\n"
-                f"📌 Sizning vazifangiz: <b>{task.description}</b>\n"
-                f"⏳ Deadline: {task.deadline_date}"
-            )
             keyboard = {"inline_keyboard": [[
                 {"text": "✅ Bajardim", "callback_data": f"we_done_{task.id}"}
             ]]}
             sent_any = False
             for worker in task_workers:
+                co_names = [w.name for w in task_workers if w.pk != worker.pk]
+                shared_note = ""
+                if co_names:
+                    shared_note = (
+                        f"\n👥 Bu vazifa <b>sizga va {', '.join(co_names)}</b> ga biriktirilgan.\n"
+                        f"<i>Biringiz bajarsangiz kifoya.</i>"
+                    )
+                text = (
+                    "🔔 <b>Diqqat!</b> Tadbir 2 soatdan keyin boshlanadi!\n\n"
+                    f"🎉 Tadbir: <b>{event.name}</b>\n"
+                    f"🕐 Tadbir vaqti: <b>{event_time_str}</b>\n\n"
+                    f"📌 Sizning vazifangiz: <b>{task.description}</b>\n"
+                    f"⏳ Deadline: {task.deadline_date}"
+                    f"{shared_note}"
+                )
                 try:
                     send_worker_bot_message(
                         worker.telegram_id, text,
@@ -331,12 +352,13 @@ class Command(BaseCommand):
         scheduler.add_job(job_event_reminders, IntervalTrigger(minutes=1), id='event_reminders')
         # Ishchilar boti eslatmalari
         scheduler.add_job(job_delayed_tasks, IntervalTrigger(minutes=1), id='delayed_tasks')
-        scheduler.add_job(job_upcoming_deadlines, IntervalTrigger(minutes=1), id='deadline_reminders')
+        scheduler.add_job(job_upcoming_deadlines, CronTrigger(hour=0, minute=0), id='deadline_reminders')
         scheduler.add_job(job_event_time_reminders, IntervalTrigger(minutes=1), id='event_time_reminders')
 
         # Obuna tekshiruvi — har kuni kechasi 00:00 (ban va ogohlantirish xabarlari kunda 1 marta)
         scheduler.add_job(job_expired_subscriptions, CronTrigger(hour=0, minute=0), id='expired_subs')
         scheduler.add_job(job_subscription_warning, CronTrigger(hour=0, minute=0), id='sub_warning')
+
 
         self.stdout.write(self.style.SUCCESS("Scheduler ishga tushdi. To'xtatish: Ctrl+C"))
         try:

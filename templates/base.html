@@ -44,6 +44,11 @@
                 </a>
             </li>
             <li>
+                <a href="{% url 'planner' %}" class="nav-link {% if 'planner' in request.resolver_match.url_name %}active{% endif %}">
+                    <i class="fas fa-calendar-check"></i> Taqvim
+                </a>
+            </li>
+            <li>
                 <a href="{% url 'leads_list' %}" class="nav-link {% if 'lead' in request.resolver_match.url_name %}active{% endif %}">
                     <i class="fas fa-user-plus"></i> Ledlar
                 </a>

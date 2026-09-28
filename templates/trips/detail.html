@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load number_filters %}
 {% block title %}{{ trip.name }}{% endblock %}
 {% block page_title %}{{ trip.name }}{% endblock %}
 {% block page_sub %}{% if trip.country %}<i class="fas fa-map-marker-alt"></i> {{ trip.country }} · {% endif %}Safar to'lovlari jadvali · {{ participants.count }} ta qator{% endblock %}
@@ -187,6 +188,11 @@
 
     // Boshlang'ich: hisoblangan kataklar va statuslarni chiroyli ko'rsatamiz
     document.querySelectorAll('.calc').forEach(el => el.textContent = fmt(el.textContent));
+        // JAMI qatoridagi barcha raqamlarni ham formatlaymiz
+    ['tot-entry','tot-trip','tot-mustpay','tot-deposit','tot-paid','tot-remaining'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = fmt(el.textContent);
+    });
     document.querySelectorAll('.cell-select').forEach(s => s.dataset.val = s.value);
 
     async function saveCell(pid, field, value, cell){
@@ -228,7 +234,10 @@
     document.querySelectorAll('input.cell, textarea.cell').forEach(inp => {
         inp.addEventListener('change', () => {
             const pid = inp.closest('tr').dataset.pid;
-            saveCell(pid, inp.dataset.field, inp.value, inp);
+                        const val = inp.classList.contains('cell-num')
+                ? String(inp.value).replace(/\s/g, '')
+                : inp.value;
+            saveCell(pid, inp.dataset.field, val, inp);
         });
         if(inp.tagName === 'INPUT'){
             // Enter bosilsa saqlash (textarea da Enter = yangi qator, tegmaymiz)
@@ -241,6 +250,18 @@
     document.querySelectorAll('textarea.cell').forEach(ta => {
         autoGrow(ta);
         ta.addEventListener('input', () => autoGrow(ta));
+    });
+
+        // Raqam inputlari — chiqqanda probel bilan ko'rsatamiz, bosganda tozalaymiz
+    document.querySelectorAll('input.cell-num').forEach(inp => {
+        const show = () => {
+            const n = parseInt(String(inp.value).replace(/\s/g, ''), 10);
+            if (!isNaN(n)) inp.value = n.toLocaleString('ru-RU').replace(/,/g, ' ');
+        };
+        const clean = () => { inp.value = String(inp.value).replace(/\s/g, ''); };
+        show();
+        inp.addEventListener('focus', clean);
+        inp.addEventListener('blur', show);
     });
 
 

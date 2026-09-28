@@ -7,7 +7,7 @@ from django.contrib import messages
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
-from .models import Event, UserEvent, Venue, EventSendLog, Lead, LeadStatusLog
+from .models import Event, UserEvent, Venue, EventSendLog, Lead, LeadStatusLog, CalendarEvent
 from apps.groups.models import Group
 from apps.users.models import User
 
@@ -154,6 +154,56 @@ def calendar_view(request):
         'hero_image': hero_image,
         'today_str': today_str,
     })
+
+
+@login_required(login_url='/login/')
+def planner_view(request):
+    """Shaxsiy taqvim: qo'lda qo'shiladigan tadbirlar (ko'p kunlik ham bo'ladi).
+
+    Faqat qachon qanday tadbir borligini ko'rish uchun — botga bog'liq emas.
+    """
+    from datetime import date as date_cls
+
+    events_data = [
+        {
+            'id': ev.id,
+            'name': ev.name,
+            'start': ev.start_date.strftime('%Y-%m-%d'),
+            'end': ev.end_date.strftime('%Y-%m-%d'),
+        }
+        for ev in CalendarEvent.objects.all()
+    ]
+
+    return render(request, 'events/planner.html', {
+        'events_data': events_data,
+        'today_str': date_cls.today().strftime('%Y-%m-%d'),
+    })
+
+
+@login_required(login_url='/login/')
+def planner_add(request):
+    """Taqvimga yangi tadbir qo'shish (nom + boshlanish [+ tugash] sanasi)."""
+    if request.method == 'POST':
+        name = (request.POST.get('name') or '').strip()
+        start_date = request.POST.get('start_date') or None
+        end_date = request.POST.get('end_date') or None
+        if not name or not start_date:
+            messages.error(request, "Tadbir nomi va sanasini kiriting.")
+        else:
+            CalendarEvent.objects.create(
+                name=name, start_date=start_date, end_date=end_date or start_date,
+            )
+            messages.success(request, "Taqvimga tadbir qo'shildi.")
+    return redirect('planner')
+
+
+@login_required(login_url='/login/')
+def planner_delete(request, pk):
+    """Taqvim tadbirini o'chirish."""
+    ev = get_object_or_404(CalendarEvent, pk=pk)
+    ev.delete()
+    messages.success(request, "Tadbir o'chirildi.")
+    return redirect('planner')
 
 
 @login_required(login_url='/login/')

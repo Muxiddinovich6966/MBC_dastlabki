@@ -15,20 +15,108 @@ from apps.groups.models import Group
 from apps.messages_app.models import SendMessage
 from ..workers.models import TemplateTask
 
-
 @login_required(login_url='/login/')
 def dashboard(request):
-    now = timezone.now()
+    from datetime import date, datetime, timedelta
+    from django.db.models import Sum, Count
+    from apps.trips.models import TripParticipant
+    import json
 
+    now = timezone.now()
+    today = date.today()
+
+    # ── A'ZOLAR ──────────────────────────────────────────
+    all_users = User.objects.filter(role='user')
+    total_users = all_users.count()
+    active_users = all_users.filter(is_active=True).count()
+
+    filled = UserProfile.objects.filter(user__role='user').exclude(name='').count()
+    recent_users = all_users.select_related('profile').order_by('-created_at')[:5]
+
+    # ── O'RTACHA (faqat kiritganlar bo'yicha) ──
+    ages = []
+    for bd in UserProfile.objects.exclude(birth_date='').values_list('birth_date', flat=True):
+        try:
+            dt = datetime.strptime(bd, '%d.%m.%Y')
+            age = (today - dt.date()).days // 365
+            if 15 <= age <= 80:
+                ages.append(age)
+        except Exception:
+            pass
+    avg_age = round(sum(ages) / len(ages)) if ages else None
+
+    staff_values = []
+    for v in UserProfile.objects.exclude(staff_count='').values_list('staff_count', flat=True):
+        try:
+            staff_values.append(int(str(v).replace(' ', '').replace(',', '')))
+        except Exception:
+            pass
+    avg_staff = round(sum(staff_values) / len(staff_values)) if staff_values else None
+
+    turnover_values = []
+    for v in UserProfile.objects.exclude(turnover='').values_list('turnover', flat=True):
+        try:
+            n = int(str(v).replace(' ', '').replace(',', '').replace('.', ''))
+            # Aql bovar qiladigan oraliq: 1 mln — 100 mlrd
+            if 1_000_000 <= n <= 100_000_000_000:
+                turnover_values.append(n)
+        except Exception:
+            pass
+    if turnover_values:
+        turnover_values.sort()
+        mid = len(turnover_values) // 2
+        avg_turnover = turnover_values[mid] if len(turnover_values) % 2 else (turnover_values[mid - 1] +
+                                                                              turnover_values[mid]) // 2
+    else:
+        avg_turnover = None
+
+    # ── TUSHUM ──────────────────────────────────────────
+    # Diqqat: obuna — so'mda, safar to'lovi — dollarda. Ular boshqa valyuta
+    # bo'lgani uchun QO'SHILMAYDI, alohida ko'rsatiladi.
+    plan_income = UserPlan.objects.aggregate(total=Sum('price'))['total'] or 0
+    trip_income = TripParticipant.objects.aggregate(total=Sum('paid'))['total'] or 0
+
+    active_plans = UserPlan.objects.filter(end_date__gte=today).count()
+    expiring_soon = UserPlan.objects.filter(
+        end_date__gte=today, end_date__lte=today + timedelta(days=7)
+    ).count()
+
+    # ── SOHA TAQSIMOTI ──────────────────────────────────
+    industry_stats = list(
+        UserProfile.objects.exclude(industry='')
+        .values('industry').annotate(count=Count('id')).order_by('-count')[:8]
+    )
+
+    # ── OYLIK O'SISH (oxirgi 6 oy) ──────────────────────
+    monthly_growth = []
+    cur = today.replace(day=1)
+    months = []
+    for _ in range(6):
+        months.append(cur)
+        cur = (cur - timedelta(days=1)).replace(day=1)
+    for m in reversed(months):
+        if m.month == 12:
+            m_end = m.replace(year=m.year + 1, month=1)
+        else:
+            m_end = m.replace(month=m.month + 1)
+        monthly_growth.append({
+            'month': m.strftime('%b %Y'),
+            'count': all_users.filter(created_at__gte=m, created_at__lt=m_end).count(),
+        })
+
+    # ── TOP SAFARLAR ─────────────────────────────────────
+    top_trips = list(
+        TripParticipant.objects.filter(went=True)
+        .values('trip__name').annotate(count=Count('id')).order_by('-count')[:5]
+    )
+
+    # ── ESLATMALAR (Lead + Safar) ────────────────────────
     due_reminders = []
 
     leads = (
-        Lead.objects
-        .filter(status='follow_up', follow_up_at__lte=now)
-        .select_related('event')
-        .order_by('follow_up_at')
+        Lead.objects.filter(status='follow_up', follow_up_at__lte=now)
+        .select_related('event').order_by('follow_up_at')
     )
-
     for lead in leads:
         due_reminders.append({
             'kind': 'Lead',
@@ -39,35 +127,54 @@ def dashboard(request):
         })
 
     participants = (
-        TripParticipant.objects
-        .filter(
-            travel_status='follow_up',
-            follow_up_at__lte=now
-        )
-        .select_related('trip')
-        .order_by('follow_up_at')
+        TripParticipant.objects.filter(travel_status='follow_up', follow_up_at__lte=now)
+        .select_related('trip').order_by('follow_up_at')
     )
-
-    for participant in participants:
+    for p in participants:
         due_reminders.append({
             'kind': 'Safar',
-            'name': participant.display_name,
-            'detail': participant.trip.name,
-            'when': participant.follow_up_at,
-            'url': f'/trips/{participant.trip_id}/',
+            'name': p.display_name,
+            'detail': p.trip.name,
+            'when': p.follow_up_at,
+            'url': f'/trips/{p.trip_id}/',
         })
 
     due_reminders.sort(key=lambda item: item['when'])
 
+    upcoming = []
+    for e in Event.objects.filter(is_active=True):
+        try:
+            d=datetime.strptime(e.date,'%Y-%m-%d').date()
+        except Exception:
+            try:
+                d = datetime.strptime(e.date, '%d.%m.%Y').date()
+            except Exception:
+                continue
+        if d >= today:
+            upcoming.append((d,e))
+
+    upcoming.sort(key=lambda x: x[0])
+    upcoming_events = [e for _,e in upcoming[:3]]
+
     context = {
-        'users_count': User.objects.filter(role='user').count(),
+        'total_users': total_users,
+        'active_users': active_users,
+        'filled': filled,
+        'recent_users': recent_users,
+        'avg_age': avg_age,
+        'avg_staff': avg_staff,
+        'avg_turnover': avg_turnover,
+        'plan_income': plan_income,
+        'trip_income': trip_income,
+        'active_plans': active_plans,
+        'expiring_soon': expiring_soon,
+        'industry_stats': json.dumps(industry_stats, ensure_ascii=False),
+        'monthly_growth': json.dumps(monthly_growth, ensure_ascii=False),
+        'top_trips': top_trips,
+        'upcoming_events':upcoming_events,
+        'due_reminders': due_reminders,
         'events_count': Event.objects.count(),
         'groups_count': Group.objects.count(),
-        'messages_count': SendMessage.objects.count(),
-        'recent_users': User.objects.filter(role='user').select_related('profile').order_by('-created_at')[:5],
-        'recent_events': Event.objects.order_by('-created_at')[:5],
-        'upcoming_events': Event.objects.filter(is_active=True, sent=False).order_by('date')[:5],
-        'due_reminders': due_reminders,
     }
 
     return render(request, 'dashboard/index.html', context)

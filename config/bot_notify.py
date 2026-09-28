@@ -440,12 +440,14 @@ def send_subscription_warning(user_tg_id, end_date,days_left):
         return False
 
 
-def send_worker_task(worker_tg_id, event_name, event_date, task_description, deadline_date, days_before, task_id, is_update=False, overdue_grace=False):
+def send_worker_task(worker_tg_id, event_name, event_date, task_description, deadline_date, days_before, task_id, is_update=False, overdue_grace=False, co_worker_names=None):
     """Ishchiga vazifa xabari (ishchilar boti tokeni bilan).
 
     is_update=True bo'lsa — 'yangi vazifa' emas, 'tadbir o'zgardi' deb yuboradi.
     overdue_grace=True bo'lsa — vazifa muddati o'tib ketgan holda yaratilgan,
     ishchiga 1 kun (ertagacha) muhlat berilganini eslatamiz.
+    co_worker_names — shu vazifa biriktirilgan BOSHQA ishchilar ismi (ro'yxat).
+    Bo'lsa, "bu vazifa sizga va ... ga biriktirilgan" deb ko'rsatiladi.
     """
     token = settings.WORKER_BOT_TOKEN
     if not token:
@@ -463,11 +465,20 @@ def send_worker_task(worker_tg_id, event_name, event_date, task_description, dea
         "Sizga 1 kun — <b>ertagacha</b> muhlat berildi. Iltimos, kechiktirmang!"
         if overdue_grace else ""
     )
+    # Vazifa bir nechta ishchiga biriktirilgan bo'lsa — hamkorlar ismini ko'rsatamiz.
+    shared_note = ""
+    if co_worker_names:
+        names = ", ".join(co_worker_names)
+        shared_note = (
+            f"\n👥 Bu vazifa <b>sizga va {names}</b> ga biriktirilgan.\n"
+            f"<i>Biringiz bajarsangiz kifoya.</i>\n"
+        )
     text = (
         header +
         f"🎉 Tadbir: <b>{event_name}</b>\n"
         f"📅 Sana: {event_date}\n\n"
         f"📌 Vazifa: {task_description}\n"
+        + shared_note +
         f"⏳ Qachongacha: {deadline_date}"
         + grace_note
     )
@@ -679,3 +690,216 @@ def is_member_of_trips_group(tg_id):
     Bitta yuborishдаgi ogohlantirish uchun — tarmoq xatosi ham False bo'ladi.
     """
     return get_trips_membership(tg_id) == 'member'
+
+def resend_checklist(work_event, changes=None):
+    """Tadbir tahrirlanganda: eski check-list rasmini o'chirib, tepasida "Yangilandi"
+    banneri bo'lgan YANGI rasmni guruh pastiga qayta yuboradi (ko'rinishi uchun).
+    Yangi message_id saqlanadi.
+    """
+    token = settings.WORKER_BOT_TOKEN
+    group_id = getattr(settings, 'WORK_GROUP_ID', '')
+    if not token or not group_id:
+        return False
+
+    # Eski check-list rasmini o'chiramiz (agar bo'lsa)
+    if work_event.checklist_message_id and work_event.checklist_chat_id:
+        delete_worker_bot_message(work_event.checklist_chat_id, work_event.checklist_message_id)
+
+    note = None
+    if changes:
+        note = "Yangilandi · o'zgargan: " + ", ".join(changes)
+    # Izohni saqlaymiz — keyingi (vazifa bajarish) yangilashlarida ham banner ko'rinib tursin
+    work_event.checklist_note = note or ''
+
+    from config.checklist_image import render_checklist_image
+    url = f"https://api.telegram.org/bot{token}/sendPhoto"
+    try:
+        photo = render_checklist_image(work_event, update_note=note)
+        r = requests.post(
+            url,
+            data={'chat_id': group_id},
+            files={'photo': ('checklist.png', photo, 'image/png')},
+            timeout=30,
+        )
+        resp = r.json()
+        if resp.get('ok'):
+            work_event.checklist_chat_id = str(group_id)
+            work_event.checklist_message_id = resp['result']['message_id']
+            work_event.save(update_fields=['checklist_chat_id', 'checklist_message_id', 'checklist_note'])
+            return True
+        print(f"[CHECKLIST RESEND XATO] {resp}")
+        return False
+    except Exception as e:
+        print(f"Check-list qayta yuborish xatosi:{e}")
+        return False
+
+
+def send_worker_event_update_notice(worker_tg_id, work_event, changes):
+    """Bitta ishchiga tadbir o'zgargani haqida qisqa ogohlantirish (tugmasiz).
+    Faqat vaqt/sana kabi o'zgarishlarda ishlatiladi — vazifa qaytadan yuborilmaydi.
+    """
+    token = settings.WORKER_BOT_TOKEN
+    if not token or not worker_tg_id:
+        return False
+
+    ev_date = work_event.event_date
+    date_str = ev_date.strftime('%d.%m.%Y') if hasattr(ev_date, 'strftime') else str(ev_date)
+    time_str = ''
+    if getattr(work_event, 'event_time', None):
+        t = work_event.event_time
+        time_str = t.strftime('%H:%M') if hasattr(t, 'strftime') else str(t)[:5]
+
+    lines = [
+        "⚠️ <b>DIQQAT! TADBIR O'ZGARDI!</b>",
+        "",
+        f"🎉 Tadbir: <b>{work_event.name}</b>",
+        f"📅 Sana: {date_str}" + (f"\n🕐 Vaqt: {time_str}" if time_str else ""),
+    ]
+    if changes:
+        lines.append("")
+        lines.append("O'zgargan: <b>" + ", ".join(changes) + "</b>")
+    lines.append("")
+    lines.append("<i>Vazifangiz o'sha-o'sha — faqat tadbir ma'lumoti yangilandi.</i>")
+
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    try:
+        r = requests.post(url, json={
+            'chat_id': worker_tg_id, 'text': "\n".join(lines), 'parse_mode': 'HTML',
+        }, timeout=10)
+        return r.json().get('ok', False)
+    except Exception as e:
+        print(f"Ishchiga ogohlantirish xatosi: {e}")
+        return False
+
+
+def _group_task_by_dept(work_event):
+    """Tadbir vazifalarini bulimlar buyicha ajratadi"""
+    from apps.workers.models import Task
+
+    tasks = Task.objects.filter(event = work_event).prefetch_related('workers').order_by('deadline_date')
+    groups = {}
+    for task in tasks:
+        task_workers= list(task.workers.all())
+        dept = task_workers[0].department if task_workers and task_workers[0].department else 'other'
+        groups.setdefault(dept,[]).append(task)
+    return groups
+
+
+def send_checklists(work_event):
+    """Har bir bulim uchun alohida checklist RASMI yuboradi (yoki mavjudni yangilaydi)."""
+    from apps.workers.models import ChecklistMessage
+    from config.checklist_image import render_checklist_image
+
+    token = settings.WORKER_BOT_TOKEN
+    group_id = getattr(settings, 'WORK_GROUP_ID','')
+    if not token or not group_id:
+        return 0
+
+    groups = _group_task_by_dept(work_event)
+    sent=0
+
+    for dept, tasks in groups.items():
+        try:
+            photo = render_checklist_image(work_event, department=dept)
+        except Exception as e:
+            print(f"Check-list rasm xatosi ({dept}):{e}")
+            continue
+
+        existing = ChecklistMessage.objects.filter(event=work_event,department=dept).first()
+
+        try:
+            edited = False
+            if existing:
+                # Mavjud rasmni yangisiga almashtiramiz
+                url = f"https://api.telegram.org/bot{token}/editMessageMedia"
+                media = json.dumps({'type': 'photo', 'media': 'attach://photo'})
+                photo.seek(0)
+                r = requests.post(
+                    url,
+                    data={
+                        'chat_id': existing.chat_id,
+                        'message_id': existing.message_id,
+                        'media': media,
+                    },
+                    files={'photo': ('checklist.png', photo, 'image/png')},
+                    timeout=30,
+                )
+                resp = r.json()
+                if resp.get('ok'):
+                    edited = True
+                elif 'not modified' in resp.get('description',''):
+                    edited = True
+                else:
+                    # Tahrirlab bo'lmadi (masalan eski xabar matn edi yoki o'chib ketgan)
+                    # — eskisini o'chirib, yangi rasm yuboramiz.
+                    print(f"[CHECKLIST edit o'tmadi, qayta yuboramiz] {dept}:{resp}")
+                    delete_worker_bot_message(existing.chat_id, existing.message_id)
+                    existing.delete()
+                    existing = None
+
+            if not edited:
+                url = f"https://api.telegram.org/bot{token}/sendPhoto"
+                photo.seek(0)
+                r = requests.post(
+                    url,
+                    data={'chat_id': group_id},
+                    files={'photo': ('checklist.png', photo, 'image/png')},
+                    timeout=30,
+                )
+                resp = r.json()
+                if resp.get('ok'):
+                    ChecklistMessage.objects.create(
+                        event=work_event,department=dept,
+                        chat_id=str(group_id),message_id=resp['result']['message_id'],
+                    )
+                    sent+=1
+                else:
+                    print(f"[CHECKLIST XATO] {dept}:{resp}")
+
+        except Exception as e:
+            print(f"Check-list xatosi ({dept}):{e}")
+
+    return sent
+
+def update_checklists(work_event):
+    """Vazifalar bajarilganda checklist yangilanadi"""
+    return send_checklists(work_event)
+
+
+
+
+def send_tasks_summary(worker_tg_id,event_name,event_date,task_count,event_id,is_update=False):
+    """
+        Ishchiga tadbir vazifalari haqida QISQA xulosa + "Hammasini ko'rish" tugmasi.
+        Vazifalarning o'zi keyin, har biri o'z kunida yuboriladi.
+        """
+    token = settings.WORKER_BOT_TOKEN
+    if not token:
+        return None
+
+    head =  "🔄 <b>Tadbir yangilandi!</b>\n\n" if is_update else "🎉 <b>Sizga yangi vazifalar biriktirildi!</b>\n\n"
+    text = (
+    head +
+        f"🎯 Tadbir: <b>{event_name}</b>\n"
+        f"📅 Sana: {event_date}\n"
+        f"📋 Vazifalar soni: <b>{task_count} ta</b>\n\n"
+        "<i>Har bir vazifa o'z kuni kelganda alohida yuboriladi."
+        "Hoziroq hammasini ko'rish uchun quyidagi tugmani bosing 👇</i>"
+    )
+    keyboard = {"inline_keyboard":[[
+        {"text": f"📋 Hammasini ko'rish ({task_count})", "callback_data": f"we_event_{event_id}"}
+    ]]}
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    try:
+        r = requests.post(url, json={
+            'chat_id':worker_tg_id,'text':text,
+            'parse_mode':'HTML','reply_markup': keyboard,
+        },timeout=10)
+        resp = r.json()
+        if resp.get('ok'):
+            return resp['result']['message_id']
+        print(f"[XULOSA XATO] {resp}")
+        return None
+    except Exception as e:
+        print(f"Xulosa yuborish xatosi: {e}")
+        return None

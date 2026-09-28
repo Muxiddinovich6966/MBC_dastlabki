@@ -13,7 +13,7 @@
 <div class="glass-panel">
     <div class="table-container">
         <table>
-            <thead><tr><th>Ismi</th><th>Telegram ID</th><th>Roli</th><th></th></tr></thead>
+            <thead><tr><th>Ismi</th><th>Telegram ID</th><th>Roli</th><th>Bo'lim</th><th></th></tr></thead>
             <tbody>
                 {% for w in workers %}
                 <tr>
@@ -29,6 +29,7 @@
                         {% elif w.role == 'admin' %}<span class="badge badge-success">Admin</span>
                         {% else %}<span class="badge badge-warning">Ishchi</span>{% endif %}
                     </td>
+                    <td>{{ w.get_department_display|default:"—" }}</td>
                     <td>
                         <div style="display:flex; gap:6px;">
                             <a href="{% url 'worker_edit' w.id %}" class="btn btn-secondary btn-sm btn-icon" title="Tahrirlash"><i class="fas fa-edit"></i></a>
@@ -68,6 +69,22 @@
                         <option value="boss">Boshliq</option>
                         <option value="admin">Admin</option>
                     </select>
+                </div>
+                <div class="from-group">
+                    <label class="from-label">Bo'lim</label>
+                    <select name="department" class="form-control">
+                        <option value="">- Tanlanmagan -</option>
+                        {% for val,label in departments %}
+                        <option value="{{ val }}">{{label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                        <input type="checkbox" name="is_head" value="1">
+                        Bo'lim boshlig'i (check-list uchun)
+                    </label>
+                    <small style="color:#888">Botga kirish huquqiga ta'sir qilmaydi — faqat check-listda "boshliq" bo'lib chiqadi.</small>
                 </div>
             </div>
             <div class="modal-footer">

@@ -192,6 +192,35 @@ class LeadStatusLog(models.Model):
         ordering = ['-created_at']
 
 
+class CalendarEvent(models.Model):
+    """Oddiy shaxsiy taqvim tadbiri (faqat sayt uchun, botga bog'liq emas).
+
+    Admin qo'lda nom va sana(lar) kiritadi — qachon qanday tadbir borligini
+    ko'rish uchun. Tadbir bir necha kun davom etishi mumkin (start..end).
+    """
+
+    name = models.CharField(max_length=256, verbose_name="Tadbir nomi")
+    start_date = models.DateField(verbose_name="Boshlanish sanasi")
+    end_date = models.DateField(verbose_name="Tugash sanasi")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def save(self, *args, **kwargs):
+        # Tugash sanasi kiritilmasa yoki boshlanishdan oldin bo'lsa — bir kunlik tadbir
+        if not self.end_date or self.end_date < self.start_date:
+            self.end_date = self.start_date
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        if self.end_date and self.end_date != self.start_date:
+            return f"{self.name} ({self.start_date} — {self.end_date})"
+        return f"{self.name} ({self.start_date})"
+
+    class Meta:
+        verbose_name = "Taqvim tadbiri"
+        verbose_name_plural = "Taqvim tadbirlari"
+        ordering = ['start_date']
+
+
 class EventSendLog(models.Model):
     """Tadbir xabari har bir guruh/foydalanuvchiga yuborilganini kuzatish.
 

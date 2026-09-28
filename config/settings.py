@@ -28,6 +28,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django.contrib.humanize',
 
     # Loyiha app'lari (apps/ papkasi ichida)
     'apps.users',
@@ -113,6 +114,7 @@ PRIVATE_CHANNEL_ID = os.getenv('PRIVATE_CHANNEL_ID', '')
 PRIVATE_GROUP_ID = os.getenv('PRIVATE_GROUP_ID', '')
 WORKER_BOT_TOKEN = os.getenv('WORKER_BOT_TOKEN', '')
 TRIPS_GROUP_ID= os.getenv('TRIPS_GROUP_ID', '')
+WORK_GROUP_ID = os.getenv('WORK_GROUP_ID', '')
 
 # Guruhga begona a'zo qo'shilganda xabar oladigan adminlarning Telegram ID lari.
 # .env da vergul bilan ajratib yoziladi, masalan: ADMIN_IDS=123456789,987654321

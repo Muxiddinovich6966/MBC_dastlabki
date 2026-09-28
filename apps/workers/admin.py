@@ -10,8 +10,9 @@ class TemplateTaskInline(admin.TabularInline):
 
 @admin.register(Worker)
 class WorkerAdmin(admin.ModelAdmin):
-    list_display = ('name', 'telegram_id', 'role')
-    list_filter = ('role',)
+    list_display = ('name', 'telegram_id', 'role', 'department', 'is_head')
+    list_filter = ('role', 'department', 'is_head')
+    list_editable = ('is_head',)
     search_fields = ('name',)
 
 

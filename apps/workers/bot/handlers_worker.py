@@ -2,6 +2,7 @@
 Ishchilar boti — ishchi tomoni oqimi.
 "Aktiv vazifalar" → tadbir → vazifa → Bajardim → instruksiya → isbot → Tayyor → boshliqqa hisobot.
 """
+import asyncio
 import html
 from datetime import datetime
 
@@ -14,6 +15,26 @@ from .states import ProofState
 from . import keyboards as kb
 
 router = Router()
+
+# Fon rejimidagi vazifalar (GC ularni to'xtatib qo'ymasligi uchun havola saqlaymiz)
+_background_tasks = set()
+
+
+def _run_bg(coro):
+    """Coroutine'ni fon rejimida ishga tushiradi (handlerni bloklamaydi)."""
+    t = asyncio.create_task(coro)
+    _background_tasks.add(t)
+    t.add_done_callback(_background_tasks.discard)
+
+
+async def _safe_answer(callback, text=None, show_alert=False):
+    """callback.answer() ni xavfsiz chaqiradi — 'query is too old' kabi xatolarни yutadi.
+    Shunda sekin ishlaган handler ham qulamaydi (holat va fon vazifalari saqlanadi).
+    """
+    try:
+        await callback.answer(text, show_alert=show_alert)
+    except Exception as e:
+        print(f"callback.answer o'tmadi (e'tiborsiz): {e}")
 
 
 # ─────────── ORM yordamchilari ───────────
@@ -68,11 +89,12 @@ def complete_task(task_id, completed_by_tg_id=None):
     faqat birinchisi yutadi — qolganlari 0 oladi.
     """
     from apps.workers.models import Task, Worker
+    from django.utils import timezone
     worker = (Worker.objects.filter(telegram_id=completed_by_tg_id).first()
               if completed_by_tg_id else None)
     return (Task.objects.filter(id=task_id)
             .exclude(status='completed')
-            .update(status='completed', completed_by=worker))
+            .update(status='completed', completed_by=worker, completed_at=timezone.now()))
 
 
 @sync_to_async
@@ -93,6 +115,14 @@ def get_boss_and_admin_ids():
     return list(Worker.objects
                 .filter(role__in=['boss', 'admin'])
                 .values_list('telegram_id', flat=True))
+
+@sync_to_async
+def refresh_checklist(task_id):
+    from apps.workers.models import Task
+    from config.bot_notify import update_checklists
+    task = Task.objects.filter(id=task_id).select_related('event').first()
+    if task and task.event:
+        update_checklists(task.event)
 
 
 @sync_to_async
@@ -128,8 +158,12 @@ async def process_event_selection(callback: CallbackQuery):
     tasks = await get_pending_tasks_for_event(event_id, callback.from_user.id)
 
     if not tasks:
-        await callback.answer("Bu tadbirda aktiv vazifalar yo'q!", show_alert=True)
+        await _safe_answer(callback, "Bu tadbirda aktiv vazifalar yo'q!", show_alert=True)
         return
+
+    # Ko'p vazifa bo'lsa sikl uzoq cho'zilishi mumkin — query eskirmasligi uchun
+    # callback'ni DARHOL javoblab qo'yamiz.
+    await _safe_answer(callback)
 
     await callback.message.delete()
 
@@ -143,8 +177,6 @@ async def process_event_selection(callback: CallbackQuery):
         sent = await callback.message.answer(text, reply_markup=kb.task_done_kb(t.id), parse_mode="HTML")
         # Xabarni jurnalga yozamiz — tadbir tahrirlanganda o'chirilishi uchun
         await log_task_message(t.id, sent.chat.id, sent.message_id)
-
-    await callback.answer()
 
 
 # ─────────── "Bajardim" ───────────
@@ -276,8 +308,14 @@ async def process_proof_done(callback: CallbackQuery, state: FSMContext, bot: Bo
         await callback.answer("Vazifa topilmadi!", show_alert=True)
         return
 
-    event_name = task.event.name
+    # Boshliq topshirig'ida tadbir bo'lmaydi — shunda tadbir o'rniga aniq yozuv
+    event_name = task.event.name if task.event else "👔 Boshliq topshirig'i"
     worker_name = callback.from_user.full_name
+
+    # Isbot ma'lumotlari yuqorida o'qib olindi — FSM holatini DARHOL tozalaymiz.
+    # Aks holda keyingi vazifada "Avval joriy vazifani bajar" xatosi chiqadi
+    # (check-list yangilash sekin bo'lsa, handler tugamay qolib holat qotib qolar edi).
+    await state.clear()
 
     # Vazifani bajarildi deb belgilash (kim bajarganini ham saqlaymiz) — ATOMIK.
     just_completed = await complete_task(task_id, callback.from_user.id)
@@ -294,11 +332,20 @@ async def process_proof_done(callback: CallbackQuery, state: FSMContext, bot: Bo
             await callback.message.delete()
         except Exception:
             pass
-        await callback.answer(
-            "Bu vazifa allaqachon boshqa ishchi tomonidan bajarilgan!", show_alert=True
+        await _safe_answer(
+            callback, "Bu vazifa allaqachon boshqa ishchi tomonidan bajarilgan!", show_alert=True
         )
-        await state.clear()
         return
+
+    # Vazifa biz tomonimizdan bajarildi — foydalanuvchiga DARHOL javob beramiz,
+    # so'ng og'ir ishlar (xabarlarни tahrirlash, isbotni forward qilish) bajariladi.
+    # Shunda 'query is too old' xatosi chiqmaydi.
+    await _safe_answer(callback, "Vazifa bajarildi!", show_alert=True)
+
+    # Guruhdagi check-listni ENG BOSHIDA, fon rejimida yangilaymiz — shunda u
+    # boshliqqa forward qilish kabi og'ir ishlar bilan PARALLEL bajariladi
+    # (guruhda tez ko'rinadi, 15-20s kutilmaydi).
+    _run_bg(refresh_checklist(task_id))
 
     # Shu vazifaga tegishli BARCHA xabarlarni yangilaymiz — ya'ni boshqa
     # biriktirilgan ishchilar (B) va boshliqning xabarlari ham. Tugma yo'qoladi
@@ -371,5 +418,3 @@ async def process_proof_done(callback: CallbackQuery, state: FSMContext, bot: Bo
             print(f"Original xabarni yangilashda xatolik: {e}")
 
     await bot.send_message(chat_id=proof_chat_id, text="✅ <b>Isbot yuborildi!</b>", parse_mode="HTML")
-    await callback.answer("Vazifa bajarildi!", show_alert=True)
-    await state.clear()

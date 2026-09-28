@@ -16,4 +16,7 @@ urlpatterns = [
     path('leads/<int:pk>/status/', views.lead_change_status, name='lead_change_status'),
     path('venues/', views.venues_list, name='venues_list'),
     path('venues/<int:pk>/delete/', views.venue_delete, name='venue_delete'),
+    path('planner/', views.planner_view, name='planner'),
+    path('planner/add/', views.planner_add, name='planner_add'),
+    path('planner/<int:pk>/delete/', views.planner_delete, name='planner_delete'),
 ]

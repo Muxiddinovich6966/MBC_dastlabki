@@ -7,7 +7,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from datetime import timedelta, datetime
 from .models import Worker,Template,TemplateTask,WorkEvent,Task
-
+from config.bot_notify import send_tasks_summary, send_worker_task, send_checklists
 
 def _compute_deadline(event_date, days, when):
     """Deadline sanasini hisoblaydi: 'before' → tadbirdan oldin, 'after' → tadbirdan keyin."""
@@ -67,12 +67,14 @@ def workers_list(request):
             telegram_id = request.POST.get('telegram_id'),
             name = request.POST.get('name'),
             role = request.POST.get('role'),
+            department = request.POST.get('department',''),
+            is_head = bool(request.POST.get('is_head')),
         )
         messages.success(request, "Ishchi qo'shildi.")
         return redirect('workers_list')
 
     workers = Worker.objects.all().order_by('name')
-    return render(request,'workers/list.html',{'workers':workers})
+    return render(request,'workers/list.html',{'workers':workers,'departments':Worker.DEPARTMENT_CHOICES,})
 
 @login_required(login_url='/login/')
 def worker_delete(request,pk):
@@ -90,10 +92,13 @@ def worker_edit(request, pk):
         worker.name = request.POST.get('name')
         worker.telegram_id = request.POST.get('telegram_id')
         worker.role = request.POST.get('role')
+        worker.department = request.POST.get('department','')
+        worker.is_head = bool(request.POST.get('is_head'))
         worker.save()
         messages.success(request,"Ishchi ma'lumotlari yangilandi.")
         return redirect('workers_list')
-    return render(request,'workers/edit.html',{'worker':worker})
+    return render(request,'workers/edit.html',{'worker':worker,
+                                               'departments':Worker.DEPARTMENT_CHOICES,})
 
 
 
@@ -119,9 +124,19 @@ def template_detail(request,pk):
         if not selected_workers:
             messages.error(request, "Iltimos, kamida bitta ishchi tanlang.")
             return redirect('template_detail', pk=template.pk)
+        description = (request.POST.get('description') or '').strip()
+        # Xuddi shu nomli vazifa allaqachon bo'lsa — yangi (dublikat) yaratmaymiz,
+        # balki tanlangan ishchilarni mavjud vazifaga qo'shamiz. Shunda "bitta vazifa
+        # ikki ishchiga biriktirilgan" bo'ladi, checklistda bitta qator ko'rinadi.
+        existing = template.tasks.filter(description__iexact=description).first()
+        if existing:
+            existing.workers.add(*selected_workers)
+            messages.success(request, "Bu nomli vazifa bor edi — ishchilar shu vazifaga qo'shildi.")
+            return redirect('template_detail', pk=template.pk)
+
         task = TemplateTask.objects.create(
             template=template,
-            description=request.POST.get('description'),
+            description=description,
             days_before=request.POST.get('days_before'),
             when=request.POST.get('when', 'before'),
             hours_before=request.POST.get('hours_before') or None,
@@ -158,7 +173,19 @@ def template_task_edit(request, pk):
         if not selected_workers:
             messages.error(request, "Iltimos, kamida bitta ishchi tanlang.")
             return redirect('template_task_edit', pk=task.pk)
-        task.description = request.POST.get('description')
+        description = (request.POST.get('description') or '').strip()
+        # Agar boshqa vazifa xuddi shu nomli bo'lsa — ikkalasini birlashtiramiz
+        # (dublikat bo'lmasligi uchun): ishchilarni o'shanga qo'shib, bu vazifani o'chiramiz.
+        other = task.template.tasks.filter(description__iexact=description).exclude(pk=task.pk).first()
+        if other:
+            other.workers.add(*selected_workers)
+            other.workers.add(*task.workers.values_list('pk', flat=True))
+            template_pk = task.template.pk
+            task.delete()
+            messages.success(request, "Bu nomli vazifa bor edi — ishchilar birlashtirildi.")
+            return redirect('template_detail', pk=template_pk)
+
+        task.description = description
         task.days_before = request.POST.get('days_before')
         task.when = request.POST.get('when','before')
         task.hours_before = request.POST.get('hours_before') or None
@@ -254,55 +281,72 @@ def work_events_list(request):
 
 def _notify_new_tasks(work_event, tasks, is_update=False):
     """
-    Yangi vazifalarni ishchiga (Bajardim tugmasi bilan) va boshliqqa (har biri alohida, Kutilmoqda) yuboradi.
-    Admin — o'zi qo'shgani uchun xabar olmaydi.
-    is_update=True bo'lsa — 'tadbir o'zgardi' deb yuboriladi (tahrirlashda).
+     Ishchilarga QISQA xulosa yuboradi (nechta vazifa + "Hammasini ko'rish" tugmasi).
+    Vazifalarning o'zi har biri deadline kunida avtomat yuboriladi (scheduler).
+    Muddati o'tgan vazifalar esa darrov yuboriladi.
     """
-    from config.bot_notify import send_worker_task, send_boss_task_pending
-    from apps.workers.models import Worker, NotificationLog
+    from datetime import date
+    from config.bot_notify import send_tasks_summary, send_worker_task, send_checklists
+    from apps.workers.models import NotificationLog
 
+    today = date.today()
     event_date_str = (
         work_event.event_date.strftime('%d.%m.%Y')
-        if not isinstance(work_event.event_date, str) else work_event.event_date
+        if not isinstance(work_event.event_date,str) else work_event.event_date
     )
 
-    # Faqat BOSHLIQ (admin emas)
-    bosses = list(Worker.objects.filter(role='boss').exclude(telegram_id__isnull=True))
-
+    # Vazifalarni ikkiga ajratamiz:
+    #   due_now   — deadline'i bugun yoki o'tib ketgan → DARROV to'liq yuboriladi
+    #   future    — deadline'i kelajakda → faqat xulosa, o'z kunida scheduler yuboradi
+    due_now_tasks = []
+    by_worker_future = {}
     for task in tasks:
+        if task.deadline_date and task.deadline_date <= today:
+            due_now_tasks.append(task)
+        else:
+            for w in task.workers.all():
+                if w.telegram_id:
+                    by_worker_future.setdefault(w, []).append(task)
+
+    # Xulosa — faqat kelajakdagi vazifasi bor ishchilarga (soni ham faqat kelajakdagilar)
+    for worker, wtasks in by_worker_future.items():
+        send_tasks_summary(
+            worker.telegram_id, work_event.name, event_date_str,
+            len(wtasks), work_event.id, is_update=is_update,
+        )
+
+    for task in due_now_tasks:
         task_workers = list(task.workers.all())
-        worker_name = ", ".join(w.name for w in task_workers) if task_workers else "Biriktirilmagan"
         deadline_str = (
             task.deadline_date.strftime('%d.%m.%Y')
             if not isinstance(task.deadline_date, str) else task.deadline_date
         )
-
-        # 1. Har bir biriktirilgan ishchiga o'z vazifasi (Bajardim tugmasi bilan)
-        #    — barchasi bitta task.id ga bog'lanadi, biri bajarsa hammasi yopiladi.
+        # "Grace" banneri faqat haqiqatan muddati O'TGAN vazifada (deadline < bugun).
+        # Deadline'i aynan bugun bo'lsa — kechikmagan, banner chiqmaydi.
+        is_overdue = task.deadline_date < today
         for worker in task_workers:
             if not worker.telegram_id:
                 continue
+
+            co_worker_names = [w.name for w in task_workers if w.pk !=worker.pk]
             w_msg_id = send_worker_task(
-                worker.telegram_id, work_event.name, event_date_str,
-                task.description, deadline_str, task.days_before, task.id,
+                worker.telegram_id, work_event.name,event_date_str,
+                task.description,deadline_str,task.days_before,task.id,
                 is_update=is_update,
-                overdue_grace=getattr(task, '_overdue_grace', False),
+                overdue_grace=is_overdue,
+                co_worker_names=co_worker_names,
             )
             if w_msg_id:
                 NotificationLog.objects.create(
                     task=task, chat_id=worker.telegram_id, message_id=w_msg_id
                 )
 
-        # 2. Har boshliqqa shu vazifa alohida (Kutilmoqda) — va message_id ni saqlaymiz
-        for boss in bosses:
-            msg_id = send_boss_task_pending(
-                boss.telegram_id, worker_name, work_event.name, event_date_str,
-                task.description, deadline_str, is_update=is_update,
-            )
-            if msg_id:
-                NotificationLog.objects.create(
-                    task=task, chat_id=boss.telegram_id, message_id=msg_id
-                )
+        task.reminder_sent= True
+        task.save(update_fields=['reminder_sent'])
+
+    # 3. Guruhga bo'limlar bo'yicha check-listlar
+    send_checklists(work_event)
+
 
 def _delete_event_task_messages(work_event):
     """Tadbirning barcha vazifa xabarlarini (ishchi + boshliq) Telegramdan o'chiradi."""
@@ -355,6 +399,7 @@ def work_event_edit(request, pk):
         old_template_id = work_event.template_id
         old_date = work_event.event_date
         old_name = work_event.name
+        old_time = work_event.event_time
 
         new_template_id = request.POST.get('template') or None
         work_event.name = request.POST.get('name')
@@ -363,11 +408,35 @@ def work_event_edit(request, pk):
         work_event.template_id = new_template_id
         work_event.save()
 
-        template_changed = str(old_template_id) != str(new_template_id)
-        date_changed = str(old_date) != str(work_event.event_date)
-        name_changed = old_name != work_event.name
+        # Sana/vaqtни bir xil formatga keltirib solishtiramiz (DB obyekti vs POST matni)
+        def _ymd(v):
+            return v.strftime('%Y-%m-%d') if hasattr(v, 'strftime') else str(v)
 
-        if template_changed or date_changed or name_changed:
+        def _hhmm(v):
+            if not v:
+                return ''
+            return v.strftime('%H:%M') if hasattr(v, 'strftime') else str(v)[:5]
+
+        template_changed = str(old_template_id) != str(new_template_id)
+        date_changed = _ymd(old_date) != _ymd(work_event.event_date)
+        name_changed = old_name != work_event.name
+        time_changed = _hhmm(old_time) != _hhmm(event_time)
+
+        # Vazifalarga ta'sir qiladigan o'zgarishlar (shablon/sana/nom)
+        structural_changed = template_changed or date_changed or name_changed
+
+        # O'zgargan qismlar ro'yxati (rasm banneri va ishchi xabari uchun)
+        changes = []
+        if name_changed:
+            changes.append("nomi")
+        if date_changed:
+            changes.append("sanasi")
+        if time_changed:
+            changes.append("vaqti")
+        if template_changed:
+            changes.append("vazifalari")
+
+        if structural_changed:
             # 1) Eski vazifa xabarlarini (ishchi + boshliq) Telegramdan o'chiramiz
             _delete_event_task_messages(work_event)
 
@@ -389,10 +458,28 @@ def work_event_edit(request, pk):
                     task.save(update_fields=['deadline_date', 'status', 'reminder_sent',
                                              'time_reminder_sent', 'completed_by'])
 
-            # 2) Yangi xabarlarni yuboramiz ('Bajardim' tugmasi bilan) — 'tadbir o'zgardi' ogohlantirishi bilan
+            # 2) Ishchilarga yangi vazifa xabarlarini yuboramiz ('Bajardim' tugmasi bilan)
             _notify_new_tasks(work_event, list(work_event.tasks.all()), is_update=True)
+        elif time_changed:
+            # Faqat vaqt o'zgardi — vazifalar saqlanadi, lekin tadbir vaqti (2 soatlik)
+            # eslatmasi qayta yoqiladi. Ishchilarга shaxsiy ogohlantirish beramiz.
+            from config.bot_notify import send_worker_event_update_notice
+            work_event.tasks.all().update(time_reminder_sent=False)
+            notified = set()
+            for task in work_event.tasks.prefetch_related('workers'):
+                for worker in task.workers.all():
+                    if worker.telegram_id and worker.telegram_id not in notified:
+                        send_worker_event_update_notice(worker.telegram_id, work_event, ["vaqti"])
+                        notified.add(worker.telegram_id)
 
-        messages.success(request, "Tadbir yangilandi, vazifalar qayta yuborildi.")
+        # Har qanday o'zgarishda check-listni "Yangilandi" banneri bilan rasm ko'rinishida
+        # guruhga qayta yuboramiz (eski rasm o'chiriladi, yangisi pastda ko'rinadi).
+        if structural_changed or time_changed:
+            from config.bot_notify import resend_checklist
+            resend_checklist(work_event, changes)
+            messages.success(request, "Tadbir yangilandi va guruh xabardor qilindi.")
+        else:
+            messages.success(request, "Tadbir saqlandi (o'zgarish topilmadi).")
         return redirect('work_events_list')
 
     templates = Template.objects.all()
