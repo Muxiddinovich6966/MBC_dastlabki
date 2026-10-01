@@ -231,9 +231,9 @@ def build_event_text(event):
     else:
         lines.append(f"📍 <b>Manzil:</b> {event.location}")
 
-    # Tadbirni telefon kalendariga qo'shish havolasi (har tadbir uchun alohida .ics).
+    # Tadbirni telefon kalendariga qo'shish havolasi (chiroyli sahifa → bitta tugma).
     site_url = getattr(settings, 'SITE_URL', 'https://mbc-platform.duckdns.org').rstrip('/')
-    cal_url = f"{site_url}/events/{event.id}/calendar.ics"
+    cal_url = f"{site_url}/events/{event.id}/calendar/"
     lines.append("")
     lines.append("📅 <b>Tadbirni kalendarga qo'shish uchun link ustidan bosing:</b>")
     lines.append(f'<a href="{cal_url}">{cal_url}</a>')

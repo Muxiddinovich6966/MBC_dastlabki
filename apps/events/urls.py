@@ -1,9 +1,10 @@
 from django.urls import path
 from . import views
-from .calendar_ics import event_ics
+from .calendar_ics import event_ics, event_calendar_page
 
 urlpatterns = [
     path('', views.events_list, name='events_list'),
+    path('<int:pk>/calendar/', event_calendar_page, name='event_calendar_page'),
     path('<int:pk>/calendar.ics', event_ics, name='event_ics'),
     path('<int:pk>/', views.event_detail, name='event_detail'),
     path('<int:pk>/delete/', views.event_delete, name='event_delete'),

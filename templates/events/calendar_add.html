@@ -1,0 +1,65 @@
+{% load static %}<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    <title>Kalendarga qo'shish — {{ event_name }}</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            margin: 0; min-height: 100vh;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+            display: flex; align-items: center; justify-content: center;
+            padding: 20px; color: #1f2937;
+        }
+        .card {
+            background: #fff; border-radius: 20px; padding: 28px 24px;
+            max-width: 420px; width: 100%;
+            box-shadow: 0 20px 50px rgba(0,0,0,.25); text-align: center;
+        }
+        .icon { font-size: 54px; line-height: 1; margin-bottom: 8px; }
+        h1 { font-size: 20px; margin: 10px 0 4px; }
+        .meta { color: #6b7280; font-size: 15px; margin: 2px 0; }
+        .meta b { color: #374151; }
+        .btn {
+            display: block; width: 100%; margin-top: 18px; padding: 16px;
+            border: none; border-radius: 14px; font-size: 17px; font-weight: 600;
+            text-decoration: none; cursor: pointer; transition: transform .05s;
+        }
+        .btn:active { transform: scale(.98); }
+        .btn-primary { background: #4f46e5; color: #fff; }
+        .btn-alt {
+            margin-top: 12px; background: #f3f4f6; color: #374151; font-size: 15px;
+            font-weight: 500; padding: 13px;
+        }
+        .hint { margin-top: 18px; font-size: 13px; color: #9ca3af; line-height: 1.5; }
+        hr { border: none; border-top: 1px solid #eef0f3; margin: 18px 0 0; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="icon">📅</div>
+        <h1>{{ event_name }}</h1>
+        {% if when %}<p class="meta"><b>🕐</b> {{ when }}</p>{% endif %}
+        {% if location %}<p class="meta"><b>📍</b> {{ location }}</p>{% endif %}
+
+        <hr>
+
+        {% if is_apple %}
+            {# iPhone/Mac: .ics to'g'ridan Apple Calendar "qo'shish" oynasini ochadi #}
+            <a class="btn btn-primary" href="{{ ics_url }}">📅 Kalendarga qo'shish</a>
+            <a class="btn btn-alt" href="{{ google_url }}">Google Calendar bilan</a>
+        {% else %}
+            {# Android/boshqa: Google Calendar "Saqlash" sahifasi — yuklab olmaydi #}
+            <a class="btn btn-primary" href="{{ google_url }}">📅 Kalendarga qo'shish</a>
+            <a class="btn btn-alt" href="{{ ics_url }}">iPhone / boshqa kalendar</a>
+        {% endif %}
+
+        <p class="hint">
+            Tugmani bosing — tadbir kalendaringizga qo'shiladi va vaqti
+            yaqinlashganda eslatma keladi.
+        </p>
+    </div>
+</body>
+</html>
