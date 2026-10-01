@@ -46,14 +46,13 @@
 
         <hr>
 
+        {# Asosiy — Google Calendar: fayl YUKLAMAYDI, to'g'ridan "Saqlash" sahifasi #}
+        <a class="btn btn-primary" href="{{ google_url }}">📅 Kalendarga qo'shish</a>
+
         {% if is_apple %}
-            {# iPhone/Mac: .ics to'g'ridan Apple Calendar "qo'shish" oynasini ochadi #}
-            <a class="btn btn-primary" href="{{ ics_url }}">📅 Kalendarga qo'shish</a>
-            <a class="btn btn-alt" href="{{ google_url }}">Google Calendar bilan</a>
-        {% else %}
-            {# Android/boshqa: Google Calendar "Saqlash" sahifasi — yuklab olmaydi #}
-            <a class="btn btn-primary" href="{{ google_url }}">📅 Kalendarga qo'shish</a>
-            <a class="btn btn-alt" href="{{ ics_url }}">iPhone / boshqa kalendar</a>
+            {# iPhone/Mac uchun native Apple Calendar varianti (.ics) — kichik havola.
+               Eslatma: ba'zi brauzerlar .ics ni fayl qilib yuklaydi. #}
+            <a class="btn btn-alt" href="{{ ics_url }}">Apple Calendar (.ics)</a>
         {% endif %}
 
         <p class="hint">
