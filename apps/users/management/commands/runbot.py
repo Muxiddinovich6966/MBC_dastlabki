@@ -7,6 +7,8 @@ import re
 import random
 import asyncio
 import logging
+from collections import defaultdict
+
 import qrcode
 from dotenv import load_dotenv
 from aiogram import Bot
@@ -15,7 +17,7 @@ from django.core.files.base import ContentFile
 from django.core.management.base import BaseCommand
 from django.conf import settings
 from asgiref.sync import sync_to_async
-
+from aiogram.types import WebAppInfo, MenuButtonWebApp
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import CommandStart, ChatMemberUpdatedFilter, JOIN_TRANSITION
 from aiogram.fsm.context import FSMContext
@@ -240,7 +242,9 @@ CANCEL_KB = ReplyKeyboardMarkup(
     keyboard=[[KeyboardButton(text="❌ Bekor qilish")]], resize_keyboard=True, one_time_keyboard=True)
 
 MAIN_KB = ReplyKeyboardMarkup(
-    keyboard=[[KeyboardButton(text="📱 Mening QR kodim")]],
+    keyboard=[
+        [KeyboardButton(text="📅 Tadbirlar taqvimi", web_app=WebAppInfo(url="https://mbc-platform.duckdns.org/miniapp/"))],
+        [KeyboardButton(text="📱 Mening QR kodim")]],
     resize_keyboard=True)
 
 ADMIN_USERNAME = "Muxiddinivich"  # bu yerga haqiqiy admin username (@ siz)
@@ -492,63 +496,95 @@ def register_handlers(dp: Dispatcher):
         await message.answer_photo(photo=qr, caption=f"Sizning ID: <b>{uid}</b>", parse_mode="HTML")
 
     # ─── RSVP ──────────────
+    def _rsvp_labels():
+        return {
+            'boraman':"✅ Albatta boraman",
+            'balki_borarman':"🤔Harakat qilaman",
+            'balki_bormasman':"😔 Rejalarim o'zgardi",
+            'bormayman':"🙏 Bu safar yo'q",
+        }
+
+    def _keep_last_url_row(markup):
+        """Oxirgi qatordagi URL tugmalarini (Ovozlarni ko'rish / Ro'yxatdan o'tish) qaytaradi."""
+        if markup and markup.inline_keyboard:
+            last_row = markup.inline_keyboard[-1]
+            if last_row and getattr(last_row[0], 'callback_data', None) is None:
+                return last_row
+            return None
+
     @dp.callback_query(F.data.startswith("rsvp:"))
-    async def process_rsvp(cb: CallbackQuery):
+    async def process_rsvp(cb:CallbackQuery):
         parts = cb.data.split(":")
         choice = parts[1]
         event_id = parts[2]
-        result = await save_rsvp(cb.from_user.id, int(event_id), choice)
+
+        result = await save_rsvp(cb.from_user.id, int (event_id), choice)
         if result is None:
             await cb.answer("Xatolik yuz berdi.", show_alert=True)
             return
-        msgs = {
-            'boraman': "✅ Boraman",
-            'balki_borarman': "🤔 Balki borarman",
-            'balki_bormasman': "😐 Balki bormasman",
-            'bormayman': "❌ Bormayman",
-        }
-        msg_text = msgs.get(choice, "Qabul qilindi")
-        await cb.answer(f"Javobingiz saqlandi: {msg_text}", show_alert=False)
 
-        # Tugmalar UCHMAYDI — tanlangan javob belgilanadi, foydalanuvchi
-        # istagan payt boshqa tugmani bosib javobini o'zgartira oladi.
+        labels = _rsvp_labels()
+        chosen_label = labels.get(choice, "Qabul qilindi")
+        await cb.answer(f"Javobingiz saqlandi: {chosen_label}",show_alert=False)
+
         try:
             from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-            def rsvp_btn(key, label):
-                # Tanlangan javob « » ichida ajralib turadi
-                text = f"« {label} »" if key == choice else label
-                return InlineKeyboardButton(text=text, callback_data=f"rsvp:{key}:{event_id}")
-
-            info_row = [InlineKeyboardButton(
-                text="ℹ️ Rejangiz o'zgardimi? Yangilang",
-                callback_data="rsvp_info",
+            answer_row = [InlineKeyboardButton(
+                text=f"Sizning javobingiz:{chosen_label}",
+                callback_data = "rsvp_noop",
             )]
-            row1 = [rsvp_btn('boraman', '✅ Albatta boraman'), rsvp_btn('balki_borarman', '🤔 Harakat qilaman')]
-            row2 = [rsvp_btn('balki_bormasman', '😔 Rejalarim o\'zgardi'), rsvp_btn('bormayman', '🙏 Bu safar yo\'q')]
 
-            rows = [info_row, row1, row2]
+            change_row = [InlineKeyboardButton(
+                text="✏️Javobni o'zgartirish",
+                callback_data=f"rsvp_change:{event_id}",
+            )]
 
-            # Oxirgi qatorni (Ovozlarni ko'rish / Ro'yxatdan o'tish) saqlab qolamiz
-            markup = getattr(cb.message, 'reply_markup', None)
-            if markup and markup.inline_keyboard:
-                last_row = markup.inline_keyboard[-1]
-                # Agar oxirgi qator RSVP tugmalari bo'lmasa (url tugmalar bo'lsa) — qo'shamiz
-                if last_row and getattr(last_row[0], 'callback_data', None) is None:
-                    rows.append(last_row)
+            rows = [answer_row,change_row]
 
-            new_markup = InlineKeyboardMarkup(inline_keyboard=rows)
-            await cb.message.edit_reply_markup(reply_markup=new_markup)
+            last_row = _keep_last_url_row(getattr(cb.message, 'reply_markup', None))
+            if last_row:
+                rows.append(last_row)
+
+            await cb.message.edit_reply_markup(reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
         except Exception as e:
             print("Edit xatoligi:", e)
 
-    @dp.callback_query(F.data == "rsvp_info")
-    async def process_rsvp_info(cb: CallbackQuery):
-        await cb.answer(
-            "Rejalaringiz o'zgarsa, tepadagi tugmalardan boshqasini bossangiz — "
-            "javobingiz avtomatik yangilanadi. ✅",
-            show_alert=True,
-        )
+
+    @dp.callback_query(F.data.startswith("rsvp_change:"))
+    async def process_rsvp_change(cb:CallbackQuery):
+
+        event_id = cb.data.split(":")[1]
+        await cb.answer()
+
+        try:
+            from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+            labels = _rsvp_labels()
+
+            def btn(key):
+                return InlineKeyboardButton(text=labels[key], callback_data=f"rsvp:{key}:{event_id}")
+
+            rows = [
+                [btn('boraman'),btn('balki_borarman')],
+                [btn('balki_bormasman'),btn('bormayman')],
+            ]
+
+            last_row = _keep_last_url_row(getattr(cb.message,'reply_markup',None))
+            if last_row:
+                rows.append(last_row)
+
+            await cb.message.edit_reply_markup(reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
+        except Exception as e:
+            print("Edit xatolig:",e)
+
+    @dp.callback_query(F.data == "rsvp_noop")
+    async def process_rsvp_noop(cb:CallbackQuery):
+        """Javob kursatkichi bosilganda - hech narsa qilmaydi"""
+        await cb.answer("Javobingizni o'zgartirish uchun pastdagi tugmani bosing.",show_alert=False)
+
+
+
 
     @dp.callback_query(F.data.startswith("sub_extend:"))
     async def process_sub_extend(cb: CallbackQuery):
@@ -693,6 +729,21 @@ class Command(BaseCommand):
         dp = Dispatcher(storage=MemoryStorage())
         register_handlers(dp)
         self.stdout.write(self.style.SUCCESS("Mijozlar boti ishga tushdi..."))
+
+        async def _on_startup():
+            # Yozuv maydoni yonidagi ko'k "Menu" tugmasini Mini App qilib o'rnatadi.
+            # Bir marta o'rnatiladi va barcha foydalanuvchilar uchun amal qiladi.
+            try:
+                await bot.set_chat_menu_button(
+                    menu_button=MenuButtonWebApp(
+                        text="Menu",
+                        web_app=WebAppInfo(url="https://mbc-platform.duckdns.org/miniapp/"),
+                    )
+                )
+            except Exception as e:
+                logging.warning(f"Menu tugmasini o'rnatishda xato: {e}")
+
+        dp.startup.register(_on_startup)
         # allowed_updates — 'chat_member' yangilanishini ham olish uchun majburiy
         # (guruhga yangi a'zo qo'shilganini kuzatish shu orqali ishlaydi).
         asyncio.run(dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types()))

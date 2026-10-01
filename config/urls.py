@@ -8,6 +8,7 @@ from django.conf import settings
 from django.conf.urls.static import static
 from .auth_views import login_view, logout_view
 from apps.events.views import calendar_view
+from apps.events.miniapp import miniapp, miniapp_events
 
 urlpatterns = [
     path('django-admin/', admin.site.urls),
@@ -16,6 +17,8 @@ urlpatterns = [
     path('logout/', logout_view, name='logout'),
 
     path('calendar/', calendar_view, name='calendar'),
+    path('miniapp/', miniapp, name='miniapp'),
+    path('miniapp/api/events/', miniapp_events, name='miniapp_events'),
 
     path('', include('apps.users.urls')),
     path('events/', include('apps.events.urls')),

@@ -34,8 +34,13 @@
                 </a>
             </li>
             <li>
+                <a href="{% url 'event_wizard' %}" class="nav-link {% if request.resolver_match.url_name == 'event_wizard' %}active{% endif %}">
+                    <i class="fas fa-wand-magic-sparkles"></i> Tadbir yaratish
+                </a>
+            </li>
+            <li>
                 <a href="{% url 'events_list' %}" class="nav-link {% if request.resolver_match.url_name == 'events_list' or request.resolver_match.url_name == 'event_detail' %}active{% endif %}">
-                    <i class="fas fa-calendar-alt"></i> Tadbirlar
+                    <i class="fas fa-clock-rotate-left"></i> Tadbirlar tarixi
                 </a>
             </li>
             <li>

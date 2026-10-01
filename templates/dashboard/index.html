@@ -11,6 +11,30 @@
 
 {% block content %}
 
+{% if rejected_events %}
+<div class="glass-panel" style="margin-bottom:28px; border:1px solid rgba(239,68,68,.65); background:rgba(127,29,29,.18);">
+    <div style="display:flex; align-items:center; gap:10px; color:#fca5a5; margin-bottom:12px; font-weight:700;">
+        <i class="fas fa-times-circle" style="font-size:18px;"></i>
+        Boshliq rad etgan tadbirlar — {{ rejected_events|length }} ta
+    </div>
+    {% for we in rejected_events %}
+    <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; padding:10px 0; border-top:1px solid rgba(248,113,113,.25);">
+        <div>
+            <span class="badge badge-danger">Rad etildi</span>
+            <strong>{{ we.name }}</strong>
+            <div style="font-size:12px; color:var(--text-secondary); margin-top:3px;">
+                Bu tadbir boshliq tomonidan rad etildi — ishchilarga va mijozlarga yuborilmadi.
+                <span style="opacity:.8;">📅 {{ we.event_date|date:"d.m.Y" }}</span>
+            </div>
+        </div>
+        <a href="{% url 'event_rejection_dismiss' we.id %}" class="btn btn-secondary btn-sm" style="white-space:nowrap;">
+            <i class="fas fa-check"></i> Tushundim
+        </a>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
 {% if due_reminders %}
 <div class="glass-panel" style="margin-bottom:28px; border:1px solid rgba(239,68,68,.65); background:rgba(127,29,29,.18);">
     <div style="display:flex; align-items:center; gap:10px; color:#fca5a5; margin-bottom:12px; font-weight:700;">

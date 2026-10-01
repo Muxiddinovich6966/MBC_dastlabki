@@ -89,10 +89,21 @@ class TemplateTask(models.Model):
 class WorkEvent(models.Model):
     """Ishchilar tizimidagi tadbir (shablon biriktiriladigan tadbir)."""
 
+    STATUS_CHOICES = [
+        ('pending', 'Tasdiq kutilmoqda'),   # boshliq tasdig'ini kutyapti — hech narsa yuborilmagan
+        ('approved', 'Tasdiqlangan'),        # boshliq tasdiqladi — vazifalar/e'lon yuborilgan
+        ('rejected', 'Rad etilgan'),         # boshliq rad etdi
+    ]
+
     name = models.CharField(max_length=255, verbose_name="Tadbir nomi")
     event_date = models.DateField(verbose_name="Tadbir sanasi")
     event_time = models.TimeField(null=True, blank=True, verbose_name="Tadbir vaqti")
     template = models.ForeignKey(Template, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Shablon")
+    # Yangi birlashgan oqim: kalendardan yaratilgan tadbir boshliq tasdig'ini kutadi.
+    # Eski to'g'ridan-to'g'ri yaratilganlar 'approved' (default) — xatti-harakat o'zgarmaydi.
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='approved', verbose_name="Holati")
+    # Boshliq rad etganda saytda bildirishnoma chiqadi; admin ko'rib "tushundim" bosgach True bo'ladi.
+    rejection_seen = models.BooleanField(default=False, verbose_name="Rad etish bildirishnomasi ko'rildi")
     checklist_message_id = models.BigIntegerField(null=True,blank=True,verbose_name="Check-list xabar ID")
     checklist_chat_id = models.CharField(max_length=64, blank=True,verbose_name="Check-list chat ID")
     checklist_note = models.CharField(max_length=200, blank=True,

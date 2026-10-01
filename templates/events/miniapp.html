@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>MBC — Tadbirlar</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root{
+    --bg:#0b0b0d; --card:#15151a; --card2:#1d1d24; --line:#2a2a33;
+    --gold:#d4af37; --gold-soft:#f0d98a; --txt:#f5f5f7; --muted:#9a9aa6;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    font-size:15px;line-height:1.45;overscroll-behavior-y:contain}
+  body{padding:0 0 28px}
+
+  .hdr{padding:18px 16px 12px;text-align:center;
+    background:linear-gradient(180deg,#141418 0%,var(--bg) 100%)}
+  .logo{font-size:22px;font-weight:800;letter-spacing:3px;color:var(--gold)}
+  .logo span{color:var(--txt)}
+  .hello{margin-top:4px;font-size:13px;color:var(--muted)}
+
+  .tabs{display:flex;gap:8px;padding:0 16px 14px}
+  .tab{flex:1;padding:10px 0;text-align:center;border-radius:12px;
+    background:var(--card);border:1px solid var(--line);color:var(--muted);
+    font-size:13px;font-weight:600;cursor:pointer;transition:.15s}
+  .tab.on{background:linear-gradient(135deg,#d4af37,#b8912b);color:#1a1a1a;border-color:transparent}
+
+  .wrap{padding:0 16px}
+  .pane{display:none}
+  .pane.on{display:block}
+
+  .cal{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px}
+  .cal-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+  .cal-title{font-size:16px;font-weight:700}
+  .nav{width:34px;height:34px;border-radius:10px;background:var(--card2);
+    border:1px solid var(--line);color:var(--gold);font-size:17px;display:flex;
+    align-items:center;justify-content:center;cursor:pointer;flex:0 0 34px}
+  .dow{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:6px}
+  .dow div{text-align:center;font-size:11px;color:var(--muted);font-weight:600}
+  .grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+  .day{aspect-ratio:1/1;border-radius:10px;display:flex;align-items:center;
+    justify-content:center;font-size:13px;position:relative;
+    background:transparent;color:var(--txt);cursor:pointer}
+  .day.pad{opacity:.18;pointer-events:none}
+  .day.today{outline:1px solid var(--gold);outline-offset:-1px}
+  .day.has{background:var(--card2)}
+  .day.sel{background:linear-gradient(135deg,#d4af37,#b8912b);color:#1a1a1a;font-weight:700}
+  .dot{position:absolute;bottom:5px;left:50%;transform:translateX(-50%);
+    width:5px;height:5px;border-radius:50%;background:var(--gold)}
+  .day.past-dot .dot{background:var(--muted)}
+  .day.sel .dot{background:#1a1a1a}
+
+  .sub{margin:16px 0 8px;font-size:12px;color:var(--muted);font-weight:600;
+    text-transform:uppercase;letter-spacing:.5px}
+
+  .ev{display:flex;gap:12px;background:var(--card);border:1px solid var(--line);
+    border-radius:14px;padding:12px;margin-bottom:10px;cursor:pointer;
+    transition:.15s;align-items:center}
+  .ev:active{transform:scale(.985)}
+  .ev.past{opacity:.55}
+  .ev-date{flex:0 0 52px;text-align:center;background:var(--card2);
+    border-radius:10px;padding:7px 0;border:1px solid var(--line)}
+  .ev-d{font-size:19px;font-weight:800;color:var(--gold);line-height:1}
+  .ev-m{font-size:10px;color:var(--muted);text-transform:uppercase;margin-top:3px}
+  .ev-body{min-width:0;flex:1}
+  .ev-name{font-weight:700;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ev-meta{font-size:12px;color:var(--muted);margin-top:3px;overflow:hidden;
+    text-overflow:ellipsis;white-space:nowrap}
+  .ev-arrow{color:var(--line);font-size:18px}
+  .badge{display:inline-block;font-size:10px;padding:2px 7px;border-radius:99px;
+    background:rgba(212,175,55,.14);color:var(--gold-soft);margin-left:6px;vertical-align:1px}
+
+  .empty{text-align:center;color:var(--muted);padding:24px 10px;font-size:13.5px}
+  .retry{display:inline-block;margin-top:10px;padding:9px 18px;border-radius:10px;
+    background:var(--card2);border:1px solid var(--line);color:var(--gold);
+    font-size:13px;font-weight:600;cursor:pointer}
+
+  #detail{position:fixed;inset:0;background:var(--bg);z-index:50;overflow-y:auto;
+    display:none;padding-bottom:40px}
+  #detail.on{display:block}
+  .d-img{width:100%;aspect-ratio:16/9;object-fit:cover;background:var(--card2);display:block}
+  .d-pad{padding:16px}
+  .d-name{font-size:20px;font-weight:800;line-height:1.25}
+  .d-row{display:flex;gap:10px;align-items:flex-start;padding:11px 0;border-bottom:1px solid var(--line)}
+  .d-ico{flex:0 0 22px;text-align:center;font-size:15px}
+  .d-lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+  .d-val{font-size:14.5px;margin-top:1px;word-break:break-word}
+  .d-desc{margin-top:14px;font-size:14.5px;color:#dcdce2;white-space:pre-wrap}
+  .btn{display:block;width:100%;margin-top:14px;padding:14px;border-radius:14px;
+    background:linear-gradient(135deg,#d4af37,#b8912b);color:#1a1a1a;
+    font-weight:800;font-size:15px;text-align:center;border:none;cursor:pointer}
+  .btn.ghost{background:var(--card);color:var(--gold);border:1px solid var(--line)}
+  .back{display:inline-flex;align-items:center;gap:6px;color:var(--gold);
+    font-size:14px;padding:14px 16px 0;cursor:pointer}
+
+  .skel{height:66px;border-radius:14px;background:
+    linear-gradient(90deg,var(--card) 25%,var(--card2) 50%,var(--card) 75%);
+    background-size:200% 100%;animation:sh 1.2s infinite;margin-bottom:10px}
+  @keyframes sh{0%{background-position:200% 0}100%{background-position:-200% 0}}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <div class="logo">M<span>B</span>C</div>
+  <div class="hello" id="hello">Tadbirlar taqvimi</div>
+</div>
+
+<div class="tabs">
+  <div class="tab on" data-pane="up">🔥 Yaqin tadbirlar</div>
+  <div class="tab" data-pane="cal">📅 Kalendar</div>
+</div>
+
+<div class="wrap">
+  <div class="pane on" id="pane-up">
+    <div id="upList"><div class="skel"></div><div class="skel"></div><div class="skel"></div></div>
+    <div id="pastBox" style="display:none">
+      <div class="sub">O'tgan tadbirlar</div>
+      <div id="pastList"></div>
+    </div>
+  </div>
+
+  <div class="pane" id="pane-cal">
+    <div class="cal">
+      <div class="cal-top">
+        <div class="nav" id="prevM">&#8249;</div>
+        <div class="cal-title" id="calTitle">—</div>
+        <div class="nav" id="nextM">&#8250;</div>
+      </div>
+      <div class="dow"><div>Du</div><div>Se</div><div>Ch</div><div>Pa</div><div>Ju</div><div>Sh</div><div>Ya</div></div>
+      <div class="grid" id="grid"></div>
+    </div>
+    <div class="sub" id="daySub">Kunni tanlang</div>
+    <div id="dayList"></div>
+  </div>
+</div>
+
+<div id="detail"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  var tg = (window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp : null;
+
+  var MONTHS = ['Yanvar','Fevral','Mart','Aprel','May','Iyun',
+                'Iyul','Avgust','Sentabr','Oktabr','Noyabr','Dekabr'];
+  var MON_SHORT = ['yan','fev','mar','apr','may','iyn','iyl','avg','sen','okt','noy','dek'];
+
+  var EVENTS = [];
+  var BY_DAY = {};
+  var TODAY = startOfDay(new Date());
+  var viewY = TODAY.getFullYear();
+  var viewM = TODAY.getMonth();
+  var selDay = null;
+
+  // /miniapp/  ->  /miniapp/api/events/
+  var API_URL = location.pathname.replace(/\/+$/, '') + '/api/events/';
+
+  /* ---------- Telegram ---------- */
+  if (tg) {
+    try { tg.ready(); } catch (e) {}
+    try { tg.expand(); } catch (e) {}
+    try { tg.setHeaderColor('#0b0b0d'); } catch (e) {}
+    try { tg.setBackgroundColor('#0b0b0d'); } catch (e) {}
+    try { tg.disableVerticalSwipes(); } catch (e) {}
+    try { tg.BackButton.onClick(closeDetail); } catch (e) {}
+  }
+  function haptic(t) {
+    try { tg.HapticFeedback.impactOccurred(t || 'light'); } catch (e) {}
+  }
+
+  /* ---------- Tabs ---------- */
+  var tabs = document.querySelectorAll('.tab');
+  for (var i = 0; i < tabs.length; i++) {
+    tabs[i].addEventListener('click', function () {
+      var self = this;
+      var all = document.querySelectorAll('.tab');
+      for (var j = 0; j < all.length; j++) all[j].classList.remove('on');
+      var panes = document.querySelectorAll('.pane');
+      for (var k = 0; k < panes.length; k++) panes[k].classList.remove('on');
+      self.classList.add('on');
+      var p = document.getElementById('pane-' + self.getAttribute('data-pane'));
+      if (p) p.classList.add('on');
+      haptic();
+    });
+  }
+
+  document.getElementById('prevM').addEventListener('click', function () {
+    viewM--; if (viewM < 0) { viewM = 11; viewY--; }
+    haptic(); renderCal();
+  });
+  document.getElementById('nextM').addEventListener('click', function () {
+    viewM++; if (viewM > 11) { viewM = 0; viewY++; }
+    haptic(); renderCal();
+  });
+
+  /* ---------- Yuklash ---------- */
+  function load() {
+    var headers = {};
+    if (tg && tg.initData) headers['X-Telegram-Init-Data'] = tg.initData;
+
+    fetch(API_URL, { headers: headers, credentials: 'same-origin' })
+      .then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function (d) {
+        EVENTS = (d && d.events) ? d.events : [];
+
+        if (d && d.user && d.user.first_name) {
+          document.getElementById('hello').textContent = 'Salom, ' + d.user.first_name + '! 👋';
+        }
+        if (d && d.today) {
+          var p = d.today.split('-');
+          TODAY = new Date(+p[0], +p[1] - 1, +p[2]);
+          viewY = TODAY.getFullYear();
+          viewM = TODAY.getMonth();
+        }
+
+        BY_DAY = {};
+        for (var i = 0; i < EVENTS.length; i++) {
+          var e = EVENTS[i];
+          if (!e.date) continue;
+          if (!BY_DAY[e.date]) BY_DAY[e.date] = [];
+          BY_DAY[e.date].push(e);
+        }
+
+        renderUpcoming();
+        renderCal();
+      })
+      .catch(function () {
+        document.getElementById('upList').innerHTML =
+          '<div class="empty">Ma\'lumotni yuklab bo\'lmadi.<br>' +
+          'Internetni tekshirib ko\'ring.' +
+          '<br><span class="retry" id="retryBtn">Qayta urinish</span></div>';
+        var rb = document.getElementById('retryBtn');
+        if (rb) rb.addEventListener('click', function () {
+          document.getElementById('upList').innerHTML =
+            '<div class="skel"></div><div class="skel"></div><div class="skel"></div>';
+          load();
+        });
+      });
+  }
+
+  /* ---------- Yaqin tadbirlar ---------- */
+  function renderUpcoming() {
+    var up = [], past = [];
+    for (var i = 0; i < EVENTS.length; i++) {
+      (EVENTS[i].is_past ? past : up).push(EVENTS[i]);
+    }
+    past.reverse();
+    past = past.slice(0, 10);
+
+    var box = document.getElementById('upList');
+    box.innerHTML = up.length
+      ? up.map(card).join('')
+      : '<div class="empty">Hozircha rejalashtirilgan tadbir yo\'q.<br>Tez orada xabar beramiz 🔔</div>';
+
+    if (past.length) {
+      document.getElementById('pastBox').style.display = 'block';
+      document.getElementById('pastList').innerHTML = past.map(card).join('');
+    }
+    bindCards();
+  }
+
+  function card(e) {
+    var p = String(e.date || '').split('-');
+    var dd = p[2] || '--';
+    var mIdx = parseInt(p[1], 10) - 1;
+    var mm = (mIdx >= 0 && mIdx <= 11) ? MON_SHORT[mIdx] : '';
+
+    var meta = [];
+    if (e.time) meta.push('🕐 ' + e.time);
+    if (e.venue_name) meta.push('📍 ' + e.venue_name);
+    else if (e.venue_address) meta.push('📍 ' + e.venue_address);
+
+    var dl = daysLeft(e.date);
+    var soon = (!e.is_past && dl !== null && dl <= 7) ? '<span class="badge">yaqinda</span>' : '';
+
+    return '<div class="ev ' + (e.is_past ? 'past' : '') + '" data-id="' + e.id + '">' +
+             '<div class="ev-date"><div class="ev-d">' + esc(dd) + '</div>' +
+             '<div class="ev-m">' + esc(mm) + '</div></div>' +
+             '<div class="ev-body">' +
+               '<div class="ev-name">' + esc(e.name) + soon + '</div>' +
+               '<div class="ev-meta">' + esc(meta.join(' · ') || e.date_str || '') + '</div>' +
+             '</div>' +
+             '<div class="ev-arrow">&#8250;</div>' +
+           '</div>';
+  }
+
+  function daysLeft(iso) {
+    var p = String(iso || '').split('-');
+    if (p.length !== 3) return null;
+    var d = new Date(+p[0], +p[1] - 1, +p[2]);
+    if (isNaN(d.getTime())) return null;
+    return Math.round((d - TODAY) / 86400000);
+  }
+
+  function bindCards() {
+    var cards = document.querySelectorAll('.ev');
+    for (var i = 0; i < cards.length; i++) {
+      cards[i].addEventListener('click', function () {
+        haptic('medium');
+        openDetail(this.getAttribute('data-id'));
+      });
+    }
+  }
+
+  /* ---------- Kalendar ---------- */
+  function renderCal() {
+    document.getElementById('calTitle').textContent = MONTHS[viewM] + ' ' + viewY;
+
+    var shift = (new Date(viewY, viewM, 1).getDay() + 6) % 7;   // dushanba = 0
+    var total = new Date(viewY, viewM + 1, 0).getDate();
+    var prevTotal = new Date(viewY, viewM, 0).getDate();
+    var todayIso = isoOf(TODAY);
+    var html = '';
+
+    for (var i = shift; i > 0; i--) {
+      html += '<div class="day pad">' + (prevTotal - i + 1) + '</div>';
+    }
+    for (var d = 1; d <= total; d++) {
+      var iso = viewY + '-' + pad(viewM + 1) + '-' + pad(d);
+      var list = BY_DAY[iso] || [];
+      var cls = 'day';
+      if (list.length) {
+        cls += ' has';
+        var allPast = true;
+        for (var k = 0; k < list.length; k++) { if (!list[k].is_past) { allPast = false; break; } }
+        if (allPast) cls += ' past-dot';
+      }
+      if (iso === todayIso) cls += ' today';
+      if (iso === selDay) cls += ' sel';
+      html += '<div class="' + cls + '" data-iso="' + iso + '">' + d +
+              (list.length ? '<span class="dot"></span>' : '') + '</div>';
+    }
+    var tail = (7 - ((shift + total) % 7)) % 7;
+    for (var j = 1; j <= tail; j++) {
+      html += '<div class="day pad">' + j + '</div>';
+    }
+    document.getElementById('grid').innerHTML = html;
+
+    var days = document.querySelectorAll('.day[data-iso]');
+    for (var n = 0; n < days.length; n++) {
+      days[n].addEventListener('click', function () {
+        selDay = this.getAttribute('data-iso');
+        haptic();
+        renderCal();
+      });
+    }
+    renderDay();
+  }
+
+  function renderDay() {
+    var sub = document.getElementById('daySub');
+    var box = document.getElementById('dayList');
+    if (!selDay) {
+      sub.textContent = 'Kunni tanlang';
+      box.innerHTML = '';
+      return;
+    }
+    var p = selDay.split('-');
+    sub.textContent = p[2] + ' ' + MONTHS[+p[1] - 1] + ' ' + p[0];
+    var list = BY_DAY[selDay] || [];
+    box.innerHTML = list.length
+      ? list.map(card).join('')
+      : '<div class="empty">Bu kunda tadbir yo\'q</div>';
+    bindCards();
+  }
+
+  /* ---------- Tafsilot ---------- */
+  function openDetail(id) {
+    var e = null;
+    for (var i = 0; i < EVENTS.length; i++) {
+      if (String(EVENTS[i].id) === String(id)) { e = EVENTS[i]; break; }
+    }
+    if (!e) return;
+
+    var rows = row('📅', 'Sana', (e.date_str || '') + (e.time ? ', ' + e.time : ''));
+    if (e.venue_name || e.venue_address) {
+      var addr = [e.venue_name, e.venue_address].filter(function (x) { return !!x; }).join(' — ');
+      rows += row('📍', 'Manzil', addr);
+    }
+    if (e.speaker) rows += row('🎤', 'Ma\'ruzachi', e.speaker);
+
+    var d = document.getElementById('detail');
+    d.innerHTML =
+      '<div class="back" id="backBtn">&#8249; Orqaga</div>' +
+      (e.image ? '<img class="d-img" src="' + esc(e.image) + '" alt="">' : '') +
+      '<div class="d-pad">' +
+        '<div class="d-name">' + esc(e.name) + '</div>' +
+        '<div style="margin-top:12px">' + rows + '</div>' +
+        (e.description ? '<div class="d-desc">' + esc(e.description) + '</div>' : '') +
+        ((e.lat && e.lon) ? '<button class="btn ghost" id="mapBtn">🗺 Xaritada ko\'rish</button>' : '') +
+        (e.is_past ? '' : '<button class="btn" id="closeBtn">✍️ Botga qaytish</button>') +
+      '</div>';
+
+    d.classList.add('on');
+    window.scrollTo(0, 0);
+    if (tg) { try { tg.BackButton.show(); } catch (err) {} }
+
+    document.getElementById('backBtn').addEventListener('click', closeDetail);
+
+    var mb = document.getElementById('mapBtn');
+    if (mb) mb.addEventListener('click', function () {
+      var url = 'https://maps.google.com/?q=' + e.lat + ',' + e.lon;
+      if (tg && tg.openLink) tg.openLink(url); else window.open(url, '_blank');
+    });
+
+    var cb = document.getElementById('closeBtn');
+    if (cb) cb.addEventListener('click', function () {
+      haptic('medium');
+      if (tg && tg.close) tg.close();
+    });
+  }
+
+  function row(ico, lbl, val) {
+    return '<div class="d-row"><div class="d-ico">' + ico + '</div><div>' +
+           '<div class="d-lbl">' + esc(lbl) + '</div>' +
+           '<div class="d-val">' + esc(val) + '</div></div></div>';
+  }
+
+  function closeDetail() {
+    document.getElementById('detail').classList.remove('on');
+    if (tg) { try { tg.BackButton.hide(); } catch (e) {} }
+  }
+
+  /* ---------- utils ---------- */
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function startOfDay(d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+  function isoOf(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+  function esc(s) {
+    return String(s === null || s === undefined ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  /* ---------- start ---------- */
+  renderCal();   // kalendar darrov chiziladi
+  load();        // ma'lumot kelgach yangilanadi
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,439 @@
+{% extends 'base.html' %}
+{% block title %}Tadbir yaratish{% endblock %}
+{% block page_title %}Tadbir yaratish{% endblock %}
+{% block page_sub %}Tadbir nomini kiriting, so'ng uni kunga sudrang yoki bosib tanlab kunni bosing{% endblock %}
+
+{% block extra_head %}
+<style>
+    /* ===== Tadbir nomi chiplari ===== */
+    .ec-tpls { margin-bottom: 20px; }
+    .ec-addrow { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+    .ec-addrow input { flex: 1; min-width: 200px; }
+    .ec-empty-chips { font-size: 12px; color: var(--text-muted); font-style: italic; }
+    .ec-chip .cx { color: var(--text-muted); font-weight: 700; cursor: pointer; padding-left: 3px; }
+    .ec-chip .cx:hover { color: #f87171; }
+    .ec-chip.selected .cx { color: rgba(255,255,255,.8); }
+    .ec-ghost {
+        position: fixed; z-index: 9999; pointer-events: none; padding: 8px 15px; border-radius: 100px;
+        background: linear-gradient(135deg, var(--accent), #8b5cf6); color: #fff; font-size: 12.5px; font-weight: 700;
+        box-shadow: 0 8px 24px rgba(0,0,0,.45); transform: translate(-50%, -150%); white-space: nowrap;
+    }
+    .ec-hint { font-size: 11.5px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 10px; }
+    .ec-hint i { color: var(--accent); margin-right: 6px; }
+    .ec-chip-row { display: flex; flex-wrap: wrap; gap: 8px; }
+    .ec-chip {
+        display: inline-flex; align-items: center; gap: 7px; padding: 8px 15px; border-radius: 100px;
+        border: 1px solid var(--border); background: var(--bg-card); color: var(--text-primary);
+        font-size: 12.5px; font-weight: 700; cursor: grab; user-select: none; transition: all .15s ease;
+    }
+    .ec-chip:hover { border-color: var(--accent); box-shadow: 0 4px 14px rgba(99,102,241,0.28); transform: translateY(-1px); }
+    .ec-chip:active { cursor: grabbing; }
+    .ec-chip i { color: var(--accent); }
+    .ec-chip.dragging { opacity: .5; }
+    .ec-chip.selected {
+        background: linear-gradient(135deg, var(--accent), #8b5cf6); color: #fff; border-color: transparent;
+        box-shadow: 0 6px 18px rgba(99,102,241,0.5);
+    }
+    .ec-chip.selected i { color: #fff; }
+
+    /* Tanlangan shablon — ko'rsatkich */
+    .ec-selbar {
+        display: none; align-items: center; gap: 10px; margin-top: 12px; padding: 10px 14px;
+        border: 1px dashed var(--accent); border-radius: 12px; background: var(--accent-light);
+        font-size: 12.5px; font-weight: 600; color: var(--text-primary);
+    }
+    .ec-selbar.on { display: flex; }
+    .ec-selbar i { color: var(--accent); }
+    .ec-selbar b { color: var(--accent); }
+    .ec-selbar .x { margin-left: auto; cursor: pointer; color: var(--text-muted); font-weight: 700; }
+    .ec-selbar .x:hover { color: #f87171; }
+    /* Shablon tanlanganda kalendar kunlari "tanlash rejimi" da */
+    .ec-cal.picking .ec-day.clickable .n { cursor: crosshair; }
+
+    /* ===== Kalendar ===== */
+    .ec-cal {
+        background: var(--bg-card); border: 1px solid var(--border); border-radius: 24px;
+        padding: 26px 24px 22px; box-shadow: 0 20px 50px rgba(0,0,0,0.32); max-width: 560px;
+    }
+    .ec-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+    .ec-month {
+        font-size: 34px; font-weight: 900; letter-spacing: -1.2px; line-height: 1; text-transform: uppercase;
+        background: linear-gradient(135deg, var(--text-primary) 55%, var(--accent));
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    }
+    .ec-side { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
+    .ec-year { font-size: 12.5px; font-weight: 800; color: #fff; padding: 6px 17px; border-radius: 100px;
+        background: linear-gradient(135deg, var(--accent), #8b5cf6); box-shadow: 0 6px 18px rgba(99,102,241,0.42); }
+    .ec-nav { display: flex; gap: 7px; }
+    .ec-nav button { width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--border);
+        background: rgba(255,255,255,0.04); color: var(--text-secondary); cursor: pointer; font-size: 11px;
+        display: flex; align-items: center; justify-content: center; transition: all .15s ease; }
+    .ec-nav button:hover { background: var(--accent-light); color: var(--accent); border-color: var(--border-hover); }
+
+    .ec-dow { display: grid; grid-template-columns: repeat(7, 1fr); margin-top: 18px; margin-bottom: 6px; }
+    .ec-dow span { text-align: center; font-size: 10.5px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: .4px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+
+    .ec-grid { display: grid; grid-template-columns: repeat(7, 1fr); row-gap: 8px; margin-top: 8px; }
+    .ec-day { min-height: 50px; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 3px 0; border-radius: 12px; transition: background .12s ease; }
+    .ec-day .n { font-size: 13.5px; font-weight: 600; color: var(--text-primary); min-width: 30px; height: 28px; padding: 0 4px;
+        display: flex; align-items: center; justify-content: center; border-radius: 100px; }
+    .ec-day.other .n { color: var(--text-muted); opacity: .4; }
+    .ec-day.other { pointer-events: none; }
+    .ec-day.clickable { cursor: pointer; }
+    .ec-day.clickable:hover { background: rgba(255,255,255,0.05); }
+    .ec-day.clickable:active .n { transform: scale(0.92); }
+    .ec-day.has-event .n { color: #fff; font-weight: 800; box-shadow: 0 4px 14px rgba(0,0,0,0.35); }
+    .ec-day.type-client .n { background: linear-gradient(135deg, #ef4444, #b91c1c); }
+    .ec-day.type-worker .n { background: linear-gradient(135deg, #f59e0b, #b45309); }
+    .ec-day.type-mixed .n { background: linear-gradient(90deg, #ef4444 50%, #f59e0b 50%); }
+    .ec-day.is-today:not(.has-event) .n { box-shadow: inset 0 0 0 1.5px var(--accent); color: var(--accent); }
+    .ec-day.is-today.has-event .n { box-shadow: 0 0 0 2px var(--bg-card), 0 0 0 3.5px var(--accent); }
+    .ec-day.drop-hot { background: var(--accent-light); box-shadow: inset 0 0 0 2px var(--accent); }
+    .ec-label { font-size: 8px; font-weight: 600; color: var(--text-secondary); max-width: 56px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; }
+    /* Rad etilgan tadbir bo'lgan kun — nomi qizil va ustidan chizilgan */
+    .ec-day.has-rejected .ec-label { color: #f87171; text-decoration: line-through; }
+
+    /* ===== Rang izohi ===== */
+    .ec-legend { display: flex; gap: 16px; margin-top: 18px; font-size: 11.5px; color: var(--text-secondary); }
+    .ec-legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .ec-dot { width: 11px; height: 11px; border-radius: 50%; }
+    .ec-dot.c { background: linear-gradient(135deg, #ef4444, #b91c1c); }
+    .ec-dot.w { background: linear-gradient(135deg, #f59e0b, #b45309); }
+
+    /* ===== Kun modali ichidagi tadbirlar ===== */
+    .ec-ev { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; margin-bottom: 10px; text-decoration: none; }
+    .ec-ev:hover { border-color: var(--accent); background: rgba(255,255,255,0.03); }
+    .ec-ev-badge { flex-shrink: 0; width: 8px; align-self: stretch; border-radius: 100px; }
+    .ec-ev-badge.client { background: linear-gradient(180deg, #ef4444, #b91c1c); }
+    .ec-ev-badge.worker { background: linear-gradient(180deg, #f59e0b, #b45309); }
+    .ec-ev-name { font-size: 14px; font-weight: 700; color: var(--text-primary); }
+    .ec-ev-meta { font-size: 11.5px; color: var(--text-secondary); margin-top: 3px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="animate-fade-in">
+
+    <div class="ec-tpls">
+        <div class="ec-hint"><i class="fas fa-hand-pointer"></i>Tadbir nomini yozing → chip hosil bo'ladi → uni kunga sudrang (telefonda ham) yoki bosib tanlab kunni bosing</div>
+        <div class="ec-addrow">
+            <input type="text" id="ecNewName" class="form-control" placeholder="Tadbir nomi... (masalan: Sentabr uchrashuvi)" maxlength="120">
+            <button type="button" class="btn btn-primary" id="ecAddBtn"><i class="fas fa-plus"></i> Tadbir kiritish</button>
+        </div>
+        <div class="ec-chip-row" id="ecChipRow"></div>
+        <div class="ec-selbar" id="ecSelBar">
+            <i class="fas fa-arrow-down"></i> <span>«<b id="ecSelName"></b>» tanlandi — endi kerakli <b>kunni bosing</b></span>
+            <span class="x" id="ecSelClear">✕ bekor</span>
+        </div>
+    </div>
+
+    <div class="ec-cal">
+        <div class="ec-top">
+            <div class="ec-month" id="ecMonthTitle">—</div>
+            <div class="ec-side">
+                <div class="ec-year" id="ecYearBadge">—</div>
+                <div class="ec-nav">
+                    <button id="ecPrev"><i class="fas fa-chevron-left"></i></button>
+                    <button id="ecNext"><i class="fas fa-chevron-right"></i></button>
+                </div>
+            </div>
+        </div>
+
+        <div class="ec-dow">
+            <span>Dush</span><span>Sesh</span><span>Chor</span><span>Pay</span><span>Juma</span><span>Shan</span><span>Yak</span>
+        </div>
+        <div class="ec-grid" id="ecDayGrid"></div>
+
+        <div class="ec-legend">
+            <span><i class="ec-dot c"></i> Mijoz e'loni</span>
+            <span><i class="ec-dot w"></i> Ishchilar tadbiri</span>
+        </div>
+    </div>
+</div>
+
+<!-- Kun modali: o'sha kundagi tadbirlar + yangi qo'shish -->
+<div class="modal-overlay" id="dayModal">
+    <div class="modal">
+        <div class="modal-header">
+            <div class="modal-title" id="dayModalTitle">Kun</div>
+            <button class="modal-close" onclick="closeModal('dayModal')">&times;</button>
+        </div>
+        <div class="modal-body" id="dayModalBody"></div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('dayModal')">Yopish</button>
+            <a class="btn btn-primary" id="dayModalNew" href="#"><i class="fas fa-plus"></i> Bu kunga yangi tadbir</a>
+        </div>
+    </div>
+</div>
+
+{{ events_data|json_script:"ec-events" }}
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var events = JSON.parse(document.getElementById('ec-events').textContent);
+    var todayStr = "{{ today_str }}";
+    var formUrl = "{% url 'event_create_form' %}";
+    var MONTHS = ['Yanvar','Fevral','Mart','Aprel','May','Iyun','Iyul','Avgust','Sentabr','Oktabr','Noyabr','Dekabr'];
+
+    function pad(n) { return n < 10 ? '0' + n : '' + n; }
+    function esc(s) { var d = document.createElement('div'); d.textContent = s == null ? '' : s; return d.innerHTML; }
+
+    function goForm(dateStr, name) {
+        var u = formUrl + '?date=' + encodeURIComponent(dateStr);
+        if (name) u += '&name=' + encodeURIComponent(name);
+        window.location.href = u;
+    }
+
+    // Sana bo'yicha tadbirlarni guruhlaymiz
+    var byDate = {};
+    events.forEach(function (ev) {
+        if (!byDate[ev.date]) byDate[ev.date] = [];
+        byDate[ev.date].push(ev);
+    });
+
+    // ================= Tadbir nomi chiplari (localStorage) =================
+    var LS_KEY = 'ec_event_names';
+    var calEl = document.querySelector('.ec-cal');
+    var selBar = document.getElementById('ecSelBar');
+    var chipRow = document.getElementById('ecChipRow');
+    var selectedName = null;
+
+    function loadNames() { try { return JSON.parse(localStorage.getItem(LS_KEY)) || []; } catch (e) { return []; } }
+    function saveNames(arr) { localStorage.setItem(LS_KEY, JSON.stringify(arr)); }
+    function addName(name) {
+        name = (name || '').trim();
+        if (!name) return;
+        var arr = loadNames();
+        if (arr.indexOf(name) === -1) { arr.push(name); saveNames(arr); }
+        renderChips();
+    }
+    function removeName(name) {
+        saveNames(loadNames().filter(function (x) { return x !== name; }));
+        if (selectedName === name) clearSelection();
+        renderChips();
+    }
+
+    function clearSelection() {
+        selectedName = null;
+        chipRow.querySelectorAll('.ec-chip').forEach(function (c) { c.classList.remove('selected'); });
+        if (selBar) selBar.classList.remove('on');
+        if (calEl) calEl.classList.remove('picking');
+    }
+    function selectChip(chip) {
+        var name = chip.dataset.name;
+        if (selectedName === name) { clearSelection(); return; }  // qayta bosilsa — bekor
+        selectedName = name;
+        chipRow.querySelectorAll('.ec-chip').forEach(function (c) { c.classList.toggle('selected', c === chip); });
+        if (selBar) { document.getElementById('ecSelName').textContent = name; selBar.classList.add('on'); }
+        if (calEl) calEl.classList.add('picking');
+    }
+
+    // ---- touch-drag (telefonda sudrash) ----
+    var touchState = null;
+    function clearHot() { if (touchState && touchState.hotCell) { touchState.hotCell.classList.remove('drop-hot'); touchState.hotCell = null; } }
+    function dayCellFromPoint(x, y) {
+        var el = document.elementFromPoint(x, y);
+        if (!el) return null;
+        var cell = el.closest('.ec-day');
+        return (cell && cell.classList.contains('clickable') && cell.dataset.date) ? cell : null;
+    }
+
+    function bindChip(chip) {
+        var name = chip.dataset.name;
+
+        chip.addEventListener('click', function (e) {
+            if (e.target.classList.contains('cx')) return;
+            selectChip(chip);
+        });
+        var cx = chip.querySelector('.cx');
+        if (cx) cx.addEventListener('click', function (e) { e.stopPropagation(); removeName(name); });
+
+        // Kompyuter: HTML5 drag
+        chip.addEventListener('dragstart', function (e) {
+            e.dataTransfer.setData('text/plain', name);
+            e.dataTransfer.effectAllowed = 'copy';
+            chip.classList.add('dragging');
+        });
+        chip.addEventListener('dragend', function () { chip.classList.remove('dragging'); });
+
+        // Telefon: touch bilan sudrash
+        chip.addEventListener('touchstart', function (e) {
+            if (e.target.classList.contains('cx')) { touchState = null; return; }  // ✕ — click o'zi o'chiradi
+            var t = e.touches[0];
+            touchState = { chip: chip, name: name, startX: t.clientX, startY: t.clientY, ghost: null, moved: false, hotCell: null };
+        }, { passive: true });
+
+        chip.addEventListener('touchmove', function (e) {
+            if (!touchState) return;
+            var t = e.touches[0];
+            if (!touchState.moved && (Math.abs(t.clientX - touchState.startX) + Math.abs(t.clientY - touchState.startY) > 8)) {
+                touchState.moved = true;
+                var g = document.createElement('div');
+                g.className = 'ec-ghost'; g.textContent = touchState.name;
+                document.body.appendChild(g);
+                touchState.ghost = g;
+                chip.classList.add('dragging');
+            }
+            if (touchState.moved) {
+                e.preventDefault();  // sahifa skroll bo'lmasin
+                touchState.ghost.style.left = t.clientX + 'px';
+                touchState.ghost.style.top = t.clientY + 'px';
+                var cell = dayCellFromPoint(t.clientX, t.clientY);
+                if (cell !== touchState.hotCell) { clearHot(); touchState.hotCell = cell; if (cell) cell.classList.add('drop-hot'); }
+            }
+        }, { passive: false });
+
+        chip.addEventListener('touchend', function (e) {
+            if (!touchState) return;
+            e.preventDefault();  // touch'dan keyingi soxta 'click'ni bekor qilamiz (ikki marta ishlamasin)
+            chip.classList.remove('dragging');
+            var wasMoved = touchState.moved;
+            var droppedName = touchState.name;
+            var hotCell = touchState.hotCell;
+            if (touchState.ghost) touchState.ghost.remove();
+            clearHot();
+            var t = (e.changedTouches && e.changedTouches[0]) || null;
+            touchState = null;
+            if (!wasMoved) { selectChip(chip); return; }  // tap → tanlash
+            var cell = t ? dayCellFromPoint(t.clientX, t.clientY) : hotCell;
+            if (cell) goForm(cell.dataset.date, droppedName);
+        }, { passive: false });
+    }
+
+    function renderChips() {
+        var arr = loadNames();
+        chipRow.innerHTML = '';
+        if (!arr.length) {
+            chipRow.innerHTML = '<span class="ec-empty-chips">Hozircha tadbir nomi qo\'shilmagan.</span>';
+            return;
+        }
+        arr.forEach(function (name) {
+            var chip = document.createElement('span');
+            chip.className = 'ec-chip' + (name === selectedName ? ' selected' : '');
+            chip.setAttribute('draggable', 'true');
+            chip.dataset.name = name;
+            chip.innerHTML = '<i class="fas fa-calendar-day"></i> ' + esc(name) + ' <span class="cx">✕</span>';
+            bindChip(chip);
+            chipRow.appendChild(chip);
+        });
+    }
+
+    document.getElementById('ecAddBtn').addEventListener('click', function () {
+        var inp = document.getElementById('ecNewName');
+        addName(inp.value); inp.value = ''; inp.focus();
+    });
+    document.getElementById('ecNewName').addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); addName(this.value); this.value = ''; }
+    });
+    var selClear = document.getElementById('ecSelClear');
+    if (selClear) selClear.addEventListener('click', clearSelection);
+    renderChips();
+
+    var todayParts = todayStr.split('-').map(Number);
+    var view = { year: todayParts[0], month: todayParts[1] - 1 };
+
+    // Kun modalini ochish (tadbiri bor kun bosilganda)
+    function openDay(dateStr, dayEvents) {
+        var p = dateStr.split('-').map(Number);
+        document.getElementById('dayModalTitle').textContent = p[2] + ' ' + MONTHS[p[1] - 1] + ' ' + p[0];
+        var body = '';
+        dayEvents.forEach(function (ev) {
+            var typeTxt = ev.type === 'client' ? "Mijoz e'loni" : 'Ishchilar tadbiri';
+            if (ev.status === 'rejected') typeTxt += ' — RAD ETILGAN';
+            else if (ev.status === 'pending') typeTxt += ' — tasdiq kutilmoqda';
+            var meta = (ev.mark ? ev.mark + ' ' : '') + typeTxt + (ev.time ? '  ·  ' + ev.time : '');
+            var nameStyle = ev.status === 'rejected' ? ' style="color:#f87171; text-decoration:line-through;"' : '';
+            body += '<a class="ec-ev" href="' + ev.url + '">';
+            body += '  <span class="ec-ev-badge ' + ev.type + '"></span>';
+            body += '  <span><span class="ec-ev-name"' + nameStyle + '>' + esc(ev.name) + '</span>';
+            body += '  <span class="ec-ev-meta">' + esc(meta) + '</span></span>';
+            body += '</a>';
+        });
+        document.getElementById('dayModalBody').innerHTML = body;
+        document.getElementById('dayModalNew').href = formUrl + '?date=' + encodeURIComponent(dateStr);
+        openModal('dayModal');
+    }
+
+    function renderMonth() {
+        document.getElementById('ecMonthTitle').textContent = MONTHS[view.month];
+        document.getElementById('ecYearBadge').textContent = view.year;
+
+        var grid = document.getElementById('ecDayGrid');
+        grid.innerHTML = '';
+
+        var firstOfMonth = new Date(view.year, view.month, 1);
+        var startOffset = (firstOfMonth.getDay() + 6) % 7;
+        var daysInMonth = new Date(view.year, view.month + 1, 0).getDate();
+        var prevMonthDays = new Date(view.year, view.month, 0).getDate();
+
+        var cells = [];
+        for (var i = startOffset; i > 0; i--) cells.push({ day: prevMonthDays - i + 1, other: true });
+        for (var d = 1; d <= daysInMonth; d++) cells.push({ day: d, other: false });
+        var nextDay = 1;
+        while (cells.length % 7 !== 0) cells.push({ day: nextDay++, other: true });
+
+        cells.forEach(function (c) {
+            var cell = document.createElement('div');
+            if (c.other) {
+                cell.className = 'ec-day other';
+                cell.innerHTML = '<span class="n">' + c.day + '</span>';
+                grid.appendChild(cell);
+                return;
+            }
+            var dateStr = view.year + '-' + pad(view.month + 1) + '-' + pad(c.day);
+            var dayEvents = byDate[dateStr] || [];
+            var hasEvents = dayEvents.length > 0;
+            var isToday = dateStr === todayStr;
+
+            var typeClass = '';
+            if (hasEvents) {
+                var hasC = dayEvents.some(function (x) { return x.type === 'client'; });
+                var hasW = dayEvents.some(function (x) { return x.type === 'worker'; });
+                typeClass = (hasC && hasW) ? ' type-mixed' : (hasC ? ' type-client' : ' type-worker');
+            }
+
+            var hasRejected = dayEvents.some(function (x) { return x.status === 'rejected'; });
+            cell.className = 'ec-day clickable' + (hasEvents ? ' has-event' + typeClass : '')
+                + (hasRejected ? ' has-rejected' : '') + (isToday ? ' is-today' : '');
+
+            var label = '';
+            if (hasEvents) {
+                var mark0 = dayEvents[0].mark ? dayEvents[0].mark + ' ' : '';
+                label = dayEvents.length > 1 ? (mark0 + dayEvents[0].name + ' +' + (dayEvents.length - 1)) : (mark0 + dayEvents[0].name);
+                cell.title = dayEvents.map(function (x) { return (x.mark ? x.mark + ' ' : '') + x.name; }).join(', ');
+            }
+            cell.innerHTML = '<span class="n">' + c.day + '</span>' + (hasEvents ? '<span class="ec-label">' + esc(label) + '</span>' : '');
+            cell.dataset.date = dateStr;  // touch-drag uchun
+
+            // Bosish: nom tanlangan bo'lsa — o'sha nom bilan yaratish;
+            // aks holda tadbiri bor kun → ko'rsatish, bo'sh kun → yangi tadbir
+            cell.addEventListener('click', function () {
+                if (selectedName) { goForm(dateStr, selectedName); return; }
+                if (hasEvents) openDay(dateStr, dayEvents);
+                else goForm(dateStr, '');
+            });
+            // Nom chipini tashlash → o'sha sana + nom bilan yangi tadbir
+            cell.addEventListener('dragover', function (e) { e.preventDefault(); cell.classList.add('drop-hot'); });
+            cell.addEventListener('dragleave', function () { cell.classList.remove('drop-hot'); });
+            cell.addEventListener('drop', function (e) {
+                e.preventDefault(); cell.classList.remove('drop-hot');
+                goForm(dateStr, e.dataTransfer.getData('text/plain'));
+            });
+
+            grid.appendChild(cell);
+        });
+    }
+
+    document.getElementById('ecPrev').addEventListener('click', function () {
+        view.month--; if (view.month < 0) { view.month = 11; view.year--; } renderMonth();
+    });
+    document.getElementById('ecNext').addEventListener('click', function () {
+        view.month++; if (view.month > 11) { view.month = 0; view.year++; } renderMonth();
+    });
+
+    renderMonth();
+});
+</script>
+{% endblock %}

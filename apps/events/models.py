@@ -47,8 +47,31 @@ class Event(models.Model):
     is_active = models.BooleanField(default=True, verbose_name="Faol")
     created_at = models.DateTimeField(auto_now_add=True)
 
+    # Birlashgan tadbir: shu mijoz e'loni qaysi ishchilar tadbiriga bog'langan.
+    # Kalendardagi wizard ikkalasini birga yaratadi; boshliq tasdiqlagach ikkisi ham ketadi.
+    work_event = models.OneToOneField(
+        'workers.WorkEvent', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='client_event', verbose_name="Ishchilar tadbiri",
+    )
+
     def __str__(self):
         return self.name
+
+    @property
+    def approval_status(self):
+        """Boshliq tasdig'i holati: 'pending' | 'approved' | 'rejected' yoki None.
+
+        None — bu tadbir boshliq tasdig'iga bog'lanmagan (eski/to'g'ridan-to'g'ri yaratilgan).
+        """
+        return self.work_event.status if self.work_event_id else None
+
+    @property
+    def is_rejected(self):
+        return self.approval_status == 'rejected'
+
+    @property
+    def is_pending(self):
+        return self.approval_status == 'pending'
 
     class Meta:
         verbose_name = "Tadbir"

@@ -1,0 +1,269 @@
+{% extends 'base.html' %}
+{% block title %}Yangi tadbir{% endblock %}
+{% block page_title %}Yangi tadbir{% endblock %}
+{% block page_sub %}Ketma-ket: avval ishchilar, keyin mijozlar — so'ng boshliq tasdig'iga ketadi{% endblock %}
+
+{% block topbar_actions %}
+<a class="btn btn-secondary" href="{% url 'event_wizard' %}"><i class="fas fa-arrow-left"></i> Kalendarga</a>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+    .wz-steps { display:flex; gap:10px; margin-bottom:22px; }
+    .wz-chip { flex:1; display:flex; align-items:center; gap:10px; padding:12px 16px; border-radius:14px;
+        border:1px solid var(--border); background:var(--bg-card); color:var(--text-secondary); font-weight:700; font-size:13px; }
+    .wz-chip .num { width:26px; height:26px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+        background:rgba(255,255,255,0.06); font-size:12px; }
+    .wz-chip.active { border-color:var(--accent); color:var(--text-primary); box-shadow:0 4px 16px rgba(99,102,241,0.25); }
+    .wz-chip.active .num { background:linear-gradient(135deg,var(--accent),#8b5cf6); color:#fff; }
+    .wz-chip.done .num { background:#22c55e; color:#fff; }
+    .wz-pane { display:none; }
+    .wz-pane.active { display:block; animation:fade .2s ease; }
+    @keyframes fade { from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:none;} }
+    .wz-grp { display:flex; align-items:center; gap:10px; padding:9px 12px; border:1px solid var(--border);
+        border-radius:10px; cursor:pointer; }
+    .wz-grp input { width:16px; height:16px; }
+
+    /* Guruh-toggle chiplari ("Tadbirlar" bo'limidagidek) */
+    .group-toggle-list { display:flex; flex-wrap:wrap; gap:8px; margin-top:6px; }
+    .group-toggle { cursor:pointer; margin:0; }
+    .group-toggle input { position:absolute; opacity:0; width:0; height:0; }
+    .group-toggle-chip {
+        display:inline-flex; align-items:center; gap:7px;
+        padding:8px 13px; border-radius:20px; font-size:13px;
+        background:var(--surface-2); color:var(--text-secondary);
+        border:1.5px solid rgba(255,255,255,0.10); transition:all .15s; user-select:none;
+    }
+    .group-toggle-chip .chip-check { opacity:0; font-size:11px; transition:opacity .15s; }
+    .group-toggle:hover .group-toggle-chip { border-color:var(--accent); color:var(--text-primary); }
+    .group-toggle input:checked + .group-toggle-chip {
+        background:var(--accent-light); color:var(--accent);
+        border-color:var(--accent); font-weight:600;
+    }
+    .group-toggle input:checked + .group-toggle-chip .chip-check { opacity:1; }
+    .wz-venue-info { display:none; background:var(--surface-2); border-radius:8px; padding:10px 14px;
+        margin-top:8px; font-size:13px; color:var(--text-secondary); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="glass-panel animate-fade-in" style="max-width:760px;">
+    <div class="wz-steps">
+        <div class="wz-chip active" id="chip1"><span class="num">1</span> 👥 Ishchilar</div>
+        <div class="wz-chip" id="chip2"><span class="num">2</span> 📣 Mijozlar</div>
+    </div>
+
+    <form method="post" action="{% url 'event_create_form' %}" enctype="multipart/form-data" id="wzForm">
+        {% csrf_token %}
+
+        <!-- 1-QADAM: ISHCHILAR -->
+        <div class="wz-pane active" id="pane1">
+            <div class="form-group">
+                <label class="form-label">Tadbir nomi *</label>
+                <input type="text" name="name" class="form-control" required placeholder="Masalan: Sentabr konferensiyasi" value="{{ prefill_name }}">
+            </div>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label class="form-label">Sana *</label>
+                    <input type="date" name="event_date" id="wzDate" class="form-control" value="{{ prefill_date }}" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Vaqt *</label>
+                    <input type="time" name="event_time" class="form-control" required>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Shablon (vazifalar to'plami)</label>
+                <select name="template" id="wzTemplate" class="form-control">
+                    <option value="">— Shablonsiz (vazifasiz) —</option>
+                    {% for t in templates %}
+                    <option value="{{ t.id }}" {% if prefill_template == t.id|stringformat:"s" %}selected{% endif %}>{{ t.name }}</option>
+                    {% endfor %}
+                </select>
+                <small style="color:var(--text-muted);">Shablon tanlansa, uning vazifalari ishchilarga biriktiriladi.</small>
+            </div>
+            <div style="display:flex; justify-content:space-between; gap:10px; margin-top:18px;">
+                <a class="btn btn-secondary" href="{% url 'event_wizard' %}"><i class="fas fa-arrow-left"></i> Orqaga (kalendar)</a>
+                <button type="button" class="btn btn-primary" id="wzNext">Keyingi: Mijozlar <i class="fas fa-arrow-right"></i></button>
+            </div>
+        </div>
+
+        <!-- 2-QADAM: MIJOZLAR -->
+        <div class="wz-pane" id="pane2">
+            <div class="form-group">
+                <label class="form-label">Mavzu</label>
+                <input type="text" name="theme" class="form-control" placeholder="Asosiy mavzu...">
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Joy (Venue) <span style="color:var(--danger)">*</span></label>
+                <select name="venue_id" id="wzVenue" class="form-control" required onchange="fillWzVenue(this)">
+                    <option value="">— Joy tanlang —</option>
+                    {% for v in venues %}
+                    <option value="{{ v.id }}" data-name="{{ v.name }}" data-address="{{ v.address }}"
+                            data-lat="{{ v.latitude }}" data-lng="{{ v.longitude }}">
+                        {{ v.name }}{% if v.address %} — {{ v.address }}{% endif %}
+                    </option>
+                    {% endfor %}
+                </select>
+                {% if not venues %}
+                <small style="color:var(--warning); font-size:12px;">
+                    <i class="fas fa-exclamation-triangle"></i> Hali joy qo'shilmagan.
+                    <a href="{% url 'venues_list' %}">Manzillar sahifasiga o'ting</a>.
+                </small>
+                {% endif %}
+                <div class="wz-venue-info" id="wzVenueInfo">
+                    <i class="fas fa-map-marker-alt" style="color:var(--accent);"></i>
+                    <span id="wzVenueAddress"></span>
+                    <span id="wzVenueCoords" style="margin-left:10px; opacity:0.7;"></span>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Speaker</label>
+                <input type="text" name="speaker" class="form-control" placeholder="Ism Familiya">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Tavsif <span style="color:var(--danger)">*</span></label>
+                <textarea name="description" class="form-control" rows="4" placeholder="Tadbir haqida qisqacha..." required></textarea>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Kategoriya</label>
+                <select name="category" class="form-control">
+                    {% for val, label in categories %}<option value="{{ val }}">{{ label }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Rasm</label>
+                <input type="file" name="image" accept="image/*" class="form-control">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Yuboriladigan guruhlar
+                    <small style="color:var(--text-secondary); font-weight:400;">— tanlash uchun bosing</small>
+                </label>
+                {% if groups %}
+                <div class="group-toggle-list">
+                    {% for g in groups %}
+                    <label class="group-toggle">
+                        <input type="checkbox" name="send_groups" value="{{ g.id }}">
+                        <span class="group-toggle-chip">
+                            <i class="fas fa-users chip-ico"></i>
+                            <span class="chip-title">{{ g.title }}</span>
+                            <i class="fas fa-check chip-check"></i>
+                        </span>
+                    </label>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <small style="color:var(--warning); font-size:12px;">
+                    <i class="fas fa-exclamation-triangle"></i> Hali guruh qo'shilmagan.
+                </small>
+                {% endif %}
+            </div>
+            <div class="form-group">
+                <label style="display:flex; align-items:center; gap:10px; cursor:pointer; color:var(--text-secondary); font-size:13px;">
+                    <input type="checkbox" name="send_to_all_users" checked style="width:15px; height:15px; accent-color:var(--accent);">
+                    Hamma ro'yxatdan o'tgan foydalanuvchiga yuborilsin
+                </label>
+            </div>
+
+            <div style="display:flex; justify-content:space-between; margin-top:18px;">
+                <button type="button" class="btn btn-secondary" id="wzBack"><i class="fas fa-arrow-left"></i> Orqaga</button>
+                <button type="submit" class="btn btn-primary"><i class="fas fa-paper-plane"></i> Yaratish va boshliqqa yuborish</button>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var pane1 = document.getElementById('pane1'), pane2 = document.getElementById('pane2');
+    var chip1 = document.getElementById('chip1'), chip2 = document.getElementById('chip2');
+
+    function showStep(n) {
+        if (n === 1) {
+            pane1.classList.add('active'); pane2.classList.remove('active');
+            chip1.classList.add('active'); chip1.classList.remove('done');
+            chip2.classList.remove('active');
+        } else {
+            pane2.classList.add('active'); pane1.classList.remove('active');
+            chip1.classList.remove('active'); chip1.classList.add('done');
+            chip2.classList.add('active');
+        }
+    }
+
+    document.getElementById('wzNext').addEventListener('click', function () {
+        // 1-qadam majburiy maydonlarini tekshiramiz
+        var reqd = pane1.querySelectorAll('[required]');
+        for (var i = 0; i < reqd.length; i++) {
+            if (!reqd[i].value) { reqd[i].reportValidity(); return; }
+        }
+        showStep(2);
+    });
+    document.getElementById('wzBack').addEventListener('click', function () { showStep(1); });
+
+    // Yuborishda ogohlantirish (bloklamaydi):
+    //  • Guruh belgilanmagan bo'lsa   → "guruh belgilanmadi, yuborilsinmi?"
+    //  • Foydalanuvchi belgilanmagan  → "foydalanuvchilar belgilanmadi, yuborilsinmi?"
+    // OK bosilsa oynada qoladi (yuborilmaydi). Yuborishni QAYTA bosganda — so'ramay yuboriladi.
+    // Ikkalasi ham bo'sh bo'lsa (na guruh, na foydalanuvchi) — har safar to'xtatamiz (nishon yo'q).
+    var wzWarnedKey = null;
+    document.getElementById('wzForm').addEventListener('submit', function (e) {
+        var groups = this.querySelectorAll('input[name="send_groups"]:checked').length;
+        var allBox = this.querySelector('input[name="send_to_all_users"]');
+        var allUsers = allBox && allBox.checked;
+        var key = (groups > 0 ? 'g' : '') + (allUsers ? 'u' : '');
+
+        if (groups === 0 && !allUsers) {
+            // Hech qanday nishon yo'q — umuman yubormaymiz
+            e.preventDefault();
+            alert("❗ Hech qanday nishon belgilanmadi — na guruh/kanal, na foydalanuvchi.\n"
+                + "Iltimos, kamida bittasini belgilang.");
+            wzWarnedKey = null;
+            return;
+        }
+
+        var msg = null;
+        if (groups === 0 && allUsers) {
+            msg = "⚠️ Guruh/kanal belgilanmadi.\n"
+                + "Tadbir FAQAT foydalanuvchilarga yuboriladi.\n\n"
+                + "Guruh qo'shmoqchi bo'lsangiz — OK bosib oynaga qayting.\n"
+                + "Shundayam yuborish uchun \"Yaratish\" tugmasini yana bosing.";
+        } else if (groups > 0 && !allUsers) {
+            msg = "⚠️ Foydalanuvchilar belgilanmadi.\n"
+                + "Tadbir FAQAT guruh/kanalga yuboriladi.\n\n"
+                + "Foydalanuvchilarga ham yubormoqchi bo'lsangiz — OK bosib oynaga qayting.\n"
+                + "Shundayam yuborish uchun \"Yaratish\" tugmasini yana bosing.";
+        }
+
+        if (msg && wzWarnedKey !== key) {
+            // Birinchi marta shu holatda — ogohlantiramiz, yubormaymiz
+            e.preventDefault();
+            alert(msg);
+            wzWarnedKey = key;
+            return;
+        }
+        // To'liq tanlangan yoki o'sha holatda ikkinchi marta bosildi — yuboriladi
+    });
+});
+
+// Joy tanlanganda manzil/koordinatani ko'rsatamiz (inline onchange chaqiradi)
+function fillWzVenue(sel) {
+    var opt = sel.options[sel.selectedIndex];
+    var name = opt.getAttribute('data-name') || '';
+    var address = opt.getAttribute('data-address') || '';
+    var lat = opt.getAttribute('data-lat') || '';
+    var lng = opt.getAttribute('data-lng') || '';
+    var info = document.getElementById('wzVenueInfo');
+    if (name) {
+        document.getElementById('wzVenueAddress').textContent = address || name;
+        document.getElementById('wzVenueCoords').textContent = (lat && lng) ? lat + ', ' + lng : '';
+        info.style.display = 'block';
+    } else {
+        info.style.display = 'none';
+    }
+}
+</script>
+{% endblock %}

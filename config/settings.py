@@ -21,6 +21,10 @@ CSRF_TRUSTED_ORIGINS = [
     o.strip() for o in os.getenv('CSRF_TRUSTED_ORIGINS', '').split(',') if o.strip()
 ]
 
+# Botdagi havolalar (Mini App, kalendar .ics va h.k.) uchun tashqi bazaviy manzil.
+# Productionda .env da SITE_URL=https://mbc-platform.duckdns.org qilib qo'ying.
+SITE_URL = os.getenv('SITE_URL', 'https://mbc-platform.duckdns.org').rstrip('/')
+
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',

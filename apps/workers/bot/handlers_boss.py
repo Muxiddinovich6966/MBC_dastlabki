@@ -487,3 +487,40 @@ async def bt_history_show(callback: CallbackQuery):
                                          reply_markup=kb.bt_history_months_kb())
     except Exception:
         await callback.message.answer(text or empty, parse_mode="HTML")
+
+
+# ─────────── Birlashgan tadbir — boshliq tasdig'i (✅/❌) ───────────
+@router.callback_query(F.data.startswith("evapp:"))
+async def ev_approval(callback: CallbackQuery):
+    boss = await get_boss(callback.from_user.id)
+    if not boss:
+        await callback.answer("Bu amal faqat boshliq uchun.", show_alert=True)
+        return
+
+    try:
+        _, action, we_id = callback.data.split(":")
+        we_id = int(we_id)
+    except (ValueError, IndexError):
+        await callback.answer()
+        return
+
+    base = callback.message.html_text
+
+    if action == "ok":
+        await callback.answer("⏳ Tasdiqlanmoqda...")
+        from apps.events.views import approve_combined_event
+        name = await sync_to_async(approve_combined_event)(we_id)
+        if name:
+            tail = f"\n\n✅ <b>TASDIQLANDI</b> — {html.escape(boss.name)}\n<i>Ishchilar va mijozlarga yuborildi.</i>"
+        else:
+            tail = "\n\n⚠️ <i>Allaqachon tasdiqlangan yoki topilmadi.</i>"
+    else:  # "no"
+        await callback.answer("Rad etildi.")
+        from apps.events.views import reject_combined_event
+        await sync_to_async(reject_combined_event)(we_id)
+        tail = f"\n\n❌ <b>RAD ETILDI</b> — {html.escape(boss.name)}"
+
+    try:
+        await callback.message.edit_text(base + tail, parse_mode="HTML")
+    except Exception:
+        pass

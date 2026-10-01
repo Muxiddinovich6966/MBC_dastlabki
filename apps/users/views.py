@@ -156,6 +156,12 @@ def dashboard(request):
     upcoming.sort(key=lambda x: x[0])
     upcoming_events = [e for _,e in upcoming[:3]]
 
+    # ── BILDIRISHNOMA: boshliq rad etgan tadbirlar (hali ko'rilmagan) ──
+    from apps.workers.models import WorkEvent
+    rejected_events = list(
+        WorkEvent.objects.filter(status='rejected', rejection_seen=False).order_by('-id')
+    )
+
     context = {
         'total_users': total_users,
         'active_users': active_users,
@@ -173,6 +179,7 @@ def dashboard(request):
         'top_trips': top_trips,
         'upcoming_events':upcoming_events,
         'due_reminders': due_reminders,
+        'rejected_events': rejected_events,
         'events_count': Event.objects.count(),
         'groups_count': Group.objects.count(),
     }

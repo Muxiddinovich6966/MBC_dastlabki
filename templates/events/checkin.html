@@ -1,10 +1,38 @@
 {% extends 'base.html' %}
+{% load number_filters %}
 {% block title %}Check-in — {{ event.name }}{% endblock %}
 {% block page_title %}Tadbirga kirish nazorati{% endblock %}
 {% block page_sub %}{{ event.name }} — {{ event.date }}{% endblock %}
 
 {% block topbar_actions %}
 <a href="{% url 'events_list' %}" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> Orqaga</a>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+.scan-card { margin-bottom:20px; border:1px solid var(--border); border-radius:16px; padding:16px; background:var(--surface-2); }
+.scan-head { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+.scan-name { font-size:19px; font-weight:800; }
+.scan-id { font-size:12px; font-weight:700; color:var(--accent); background:var(--accent-light); padding:4px 10px; border-radius:100px; }
+.scan-sub { margin:14px 0 8px; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:var(--text-secondary); }
+.scan-sub i { color:var(--accent); }
+.scan-note { margin-top:12px; font-size:13px; color:var(--text-secondary); }
+
+.pay-box { border-radius:14px; padding:14px; margin-bottom:10px; border:1.5px solid var(--border); }
+.pay-box.owe { border-color:rgba(239,68,68,.6); background:rgba(127,29,29,.16); }
+.pay-box.clear { border-color:rgba(34,197,94,.55); background:rgba(20,83,45,.16); }
+.pay-top { display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; margin-bottom:8px; }
+.pay-trip { font-weight:700; font-size:15px; }
+.pay-tag { font-size:11px; font-weight:700; color:var(--text-secondary); background:rgba(255,255,255,.06); padding:3px 9px; border-radius:100px; }
+.pay-debt { font-size:22px; font-weight:900; color:#f87171; margin:4px 0 10px; }
+.pay-ok { font-size:16px; font-weight:800; color:#4ade80; margin:4px 0 10px; }
+.pay-ok i { margin-right:5px; }
+.pay-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+.pay-grid > div { display:flex; flex-direction:column; gap:2px; background:rgba(255,255,255,.04); border-radius:10px; padding:8px 10px; }
+.pay-grid span { font-size:10.5px; color:var(--text-secondary); }
+.pay-grid b { font-size:14px; font-weight:800; }
+@media (max-width:520px){ .pay-grid { grid-template-columns:1fr 1fr; } }
+</style>
 {% endblock %}
 
 {% block content %}
@@ -18,6 +46,43 @@
             <i class="fas fa-{% if result.status == 'success' %}check-circle{% elif result.status == 'warning' %}exclamation-triangle{% else %}times-circle{% endif %}"></i>
             {{ result.message }}
         </div>
+
+        {% if result.user_name %}
+        <div class="scan-card">
+            <div class="scan-head">
+                <div class="scan-name">{{ result.user_name }}</div>
+                <span class="scan-id">ID: {{ result.user_id }}</span>
+            </div>
+
+            {% if result.trips %}
+            <div class="scan-sub"><i class="fas fa-plane-departure"></i> Safar to'lovlari</div>
+            {% for t in result.trips %}
+            <div class="pay-box {% if t.remaining > 0 %}owe{% else %}clear{% endif %}">
+                <div class="pay-top">
+                    <span class="pay-trip">{{ t.trip_name }}</span>
+                    {% if t.travel_status %}<span class="pay-tag">{{ t.travel_status }}</span>{% endif %}
+                </div>
+
+                {% if t.remaining > 0 %}
+                <div class="pay-debt">Qarzi: {{ t.remaining|spaced }} so'm</div>
+                {% else %}
+                <div class="pay-ok"><i class="fas fa-check-circle"></i> To'liq to'langan</div>
+                {% endif %}
+
+                <div class="pay-grid">
+                    <div><span>Berishi kerak</span><b>{{ t.must_pay|spaced }}</b></div>
+                    <div><span>To'langan</span><b>{{ t.paid_total|spaced }}</b></div>
+                    <div><span>To'lov holati</span><b>{{ t.payment_status }}</b></div>
+                </div>
+            </div>
+            {% endfor %}
+            {% else %}
+            <div class="scan-note"><i class="fas fa-info-circle"></i>
+                {% if result.selected_trip_name %}Bu odam «{{ result.selected_trip_name }}» safariga yozilmagan.{% else %}Bu odam hech qanday faol safarga yozilmagan.{% endif %}
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
         {% endif %}
 
         <!-- QR skaner kamera -->
@@ -29,6 +94,19 @@
         <!-- Qo'lda ID kiritish -->
         <form method="post" id="codeForm">
             {% csrf_token %}
+
+            <label class="form-label"><i class="fas fa-plane-departure" style="color:var(--accent)"></i> Qaysi safar bo'yicha ko'rsatilsin?</label>
+            {% if active_trips %}
+            <select name="trip_id" id="tripSelect" class="form-control" style="margin-bottom:14px;">
+                <option value="">— Barcha faol safarlar —</option>
+                {% for tr in active_trips %}
+                <option value="{{ tr.id }}" {% if selected_trip_id == tr.id|stringformat:'s' %}selected{% endif %}>{{ tr.name }}</option>
+                {% endfor %}
+            </select>
+            {% else %}
+            <div class="scan-note" style="margin-bottom:14px;"><i class="fas fa-info-circle"></i> Hozircha faol safar yo'q.</div>
+            {% endif %}
+
             <label class="form-label">4 xonali ID ni kiriting</label>
             <div style="display:flex; gap:10px;">
                 <input type="text" name="code" id="codeInput" class="form-control" placeholder="0042" maxlength="4" autofocus>

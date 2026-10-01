@@ -16,7 +16,7 @@ from apps.users.models import User
 def events_list(request):
     """Tadbirlar ro'yxati + yangi tadbir qo'shish (ishchilar tadbiridan tanlanadi)."""
     from apps.workers.models import WorkEvent
-    from datetime import date
+    from datetime import date, datetime, time as time_cls
 
     if request.method == 'POST':
         venue_id = request.POST.get('venue_id')
@@ -41,10 +41,11 @@ def events_list(request):
             return redirect('events_list')
         event_time = work_event.event_time.strftime('%H:%M')
 
-        # Guruh/kanal tanlash majburiy
+        # Kamida bitta nishon: guruh/kanal YOKI "hamma foydalanuvchi".
         group_ids = request.POST.getlist('send_groups')
-        if not group_ids:
-            messages.error(request, "Iltimos, qaysi guruh yoki kanalga ketishini belgilang.")
+        if not group_ids and 'send_to_all_users' not in request.POST:
+            messages.error(request, "Kamida bir guruh/kanal tanlang yoki "
+                                    "\"Hamma foydalanuvchiga yuborilsin\" ni yoqing.")
             return redirect('events_list')
 
         event = Event.objects.create(
@@ -71,7 +72,45 @@ def events_list(request):
         messages.success(request, "Tadbir qo'shildi.")
         return redirect('events_list')
 
-    events = Event.objects.prefetch_related('responses', 'send_groups').order_by('-created_at')
+    def _parse_event_dt(e):
+        """Event.date (+time) ni datetime ga aylantiradi. Xato/bo'sh bo'lsa None."""
+        d = None
+        for fmt in ('%Y-%m-%d', '%d.%m.%Y', '%d-%m-%Y'):
+            try:
+                d = datetime.strptime((e.date or '').strip(), fmt).date()
+                break
+            except (ValueError, TypeError):
+                continue
+        if not d:
+            return None
+        t = None
+        for tf in ('%H:%M', '%H:%M:%S'):
+            try:
+                t = datetime.strptime((e.time or '').strip(), tf).time()
+                break
+            except (ValueError, TypeError):
+                continue
+        return datetime.combine(d, t or time_cls.min)
+
+    now = datetime.now()
+    all_events = list(
+        Event.objects.select_related('work_event').prefetch_related('responses', 'send_groups')
+    )
+    for e in all_events:
+        e.event_dt = _parse_event_dt(e)
+        # Sanasi o'tgan bo'lsa — o'tib ketgan (nofaol); aks holda kelajakdagi (faol)
+        e.is_past = bool(e.event_dt and e.event_dt < now)
+
+    # Kelajakdagilar: eng yaqin sana tepada. O'tganlar: eng yaqin o'tgan tepada, pastda.
+    upcoming = sorted((e for e in all_events if not e.is_past),
+                      key=lambda e: e.event_dt or datetime.max)
+    past = sorted((e for e in all_events if e.is_past),
+                  key=lambda e: e.event_dt or datetime.min, reverse=True)
+    # Birinchi o'tib ketgan tadbirga "O'tib ketgan tadbirlar" sarlavhasini belgilaymiz
+    if past:
+        past[0].show_past_header = True
+    events = upcoming + past
+
     groups = Group.objects.all()
     venues = Venue.objects.all()
     # Faqat sanasi o'tmagan (bugun yoki keyin) ishchilar tadbirlari
@@ -79,6 +118,8 @@ def events_list(request):
 
     return render(request, 'events/list.html', {
         'events': events,
+        'upcoming_count': len(upcoming),
+        'past_count': len(past),
         'groups': groups,
         'venues': venues,
         'work_events': work_events,
@@ -206,6 +247,229 @@ def planner_delete(request, pk):
     return redirect('planner')
 
 
+# ══════════════════════════════════════════════════════════════
+#  BIRLASHGAN TADBIR — kalendardan yaratish (wizard) + boshliq tasdig'i
+# ══════════════════════════════════════════════════════════════
+
+@login_required(login_url='/login/')
+def event_wizard(request):
+    """Tadbir yaratish — telefon uslubidagi kalendar (kirish sahifasi).
+
+    Tepada foydalanuvchi yozgan tadbir NOMI chiplari (localStorage'da saqlanadi),
+    pastda oylik kalendar. Bo'sh kunni bosish yoki nom chipini kunga sudrash/tanlash →
+    forma (event_create_form). Tadbiri bor kunni bosish → o'sha kun tadbirlari (modal).
+    """
+    from apps.workers.models import WorkEvent
+    from django.urls import reverse
+    from datetime import datetime, date as date_cls
+
+    def norm(value):
+        if not value:
+            return None
+        if not isinstance(value, str):
+            try:
+                return value.strftime('%Y-%m-%d')
+            except Exception:
+                return None
+        for fmt in ('%Y-%m-%d', '%d.%m.%Y', '%d-%m-%Y'):
+            try:
+                return datetime.strptime(value, fmt).strftime('%Y-%m-%d')
+            except ValueError:
+                continue
+        return None
+
+    def fmt_time(value):
+        if not value:
+            return ''
+        try:
+            return value.strftime('%H:%M')
+        except AttributeError:
+            return str(value)[:5]
+
+    events_data = []
+    STATUS_MARK = {'pending': '⏳', 'approved': '✅', 'rejected': '❌'}
+
+    # Mijozlar tadbirlari (qizil) — boshliq tasdig'iga bog'langan bo'lsa holat belgisi bilan
+    for e in Event.objects.select_related('work_event').all():
+        d = norm(e.date)
+        if not d:
+            continue
+        status = e.approval_status  # None | pending | approved | rejected
+        events_data.append({
+            'name': e.name, 'date': d,
+            'time': fmt_time(e.time),
+            'type': 'client',
+            'status': status or '',
+            'mark': STATUS_MARK.get(status, ''),
+            'url': reverse('event_detail', args=[e.id]),
+        })
+
+    # Ishchilar tadbirlari (sariq) — status belgisi bilan
+    for we in WorkEvent.objects.all():
+        d = norm(we.event_date)
+        if not d:
+            continue
+        events_data.append({
+            'name': we.name, 'date': d,
+            'time': fmt_time(we.event_time),
+            'type': 'worker',
+            'mark': STATUS_MARK.get(we.status, ''),
+            'url': reverse('work_event_detail', args=[we.id]),
+        })
+
+    events_data.sort(key=lambda x: (x['date'], x['time']))
+
+    return render(request, 'events/event_create.html', {
+        'events_data': events_data,
+        'today_str': date_cls.today().strftime('%Y-%m-%d'),
+    })
+
+
+@login_required(login_url='/login/')
+def event_create_form(request):
+    """Birlashgan tadbir formasi: 1) ishchilar (WorkEvent) 2) mijozlar (Event).
+
+    Kalendardan sana/shablon oldindan tanlangan holda ochiladi. Yakunda hech narsa
+    DARROV yuborilmaydi — 'pending' holatda yaratilib, boshliqqa ✅/❌ so'rov ketadi.
+    """
+    from apps.workers.models import WorkEvent, Template
+    from apps.workers.views import _create_tasks_from_template
+    from config.bot_notify import send_event_approval_request
+    from datetime import date as date_cls
+
+    if request.method == 'POST':
+        # 1-qadam: ishchilar tadbiri (majburiy)
+        name = (request.POST.get('name') or '').strip()
+        event_date = request.POST.get('event_date') or None
+        event_time = (request.POST.get('event_time') or '').strip()
+        template_id = request.POST.get('template') or None
+
+        if not name or not event_date or not event_time:
+            messages.error(request, "Tadbir nomi, sanasi va vaqtini kiriting.")
+            return redirect(f"{request.path}?date={event_date or ''}&template={template_id or ''}")
+
+        work_event = WorkEvent.objects.create(
+            name=name, event_date=event_date, event_time=event_time,
+            template_id=template_id, status='pending',
+        )
+        if template_id:
+            template = Template.objects.filter(pk=template_id).first()
+            if template:
+                _create_tasks_from_template(work_event, template)
+
+        # 2-qadam: mijozlar e'loni (ixtiyoriy, lekin odatda to'ldiriladi)
+        venue_id = request.POST.get('venue_id')
+        venue = Venue.objects.filter(pk=venue_id).first() if venue_id else None
+        client_event = Event.objects.create(
+            name=name,
+            date=event_date,
+            time=event_time,
+            theme=request.POST.get('theme', ''),
+            description=request.POST.get('description', ''),
+            venue=venue,
+            location=venue.name if venue else '',
+            latitude=venue.latitude if venue else '',
+            longitude=venue.longitude if venue else '',
+            speaker=request.POST.get('speaker', ''),
+            category=request.POST.get('category', 'other'),
+            send_to_all_users='send_to_all_users' in request.POST,
+            sent=False,
+            work_event=work_event,
+        )
+        if 'image' in request.FILES:
+            client_event.image = request.FILES['image']
+            client_event.save()
+        group_ids = request.POST.getlist('send_groups')
+        if group_ids:
+            client_event.send_groups.set(group_ids)
+
+        # Boshliqqa tasdiq so'rovi
+        sent = send_event_approval_request(work_event)
+        if sent:
+            messages.success(request, "✅ Tadbir yaratildi va boshliqqa tasdiq uchun yuborildi.")
+        else:
+            messages.warning(request, "Tadbir yaratildi, lekin tasdiqlaydigan boshliq topilmadi "
+                                      "(Telegram ID li boshliq yo'q).")
+        return redirect('event_wizard')
+
+    # GET — formani ko'rsatamiz (kalendardan sana/shablon oldindan tanlangan bo'lishi mumkin)
+    return render(request, 'events/event_wizard.html', {
+        'templates': Template.objects.all(),
+        'groups': Group.objects.all(),
+        'venues': Venue.objects.all(),
+        'categories': Event.CATEGORY_CHOICES,
+        'prefill_date': request.GET.get('date', ''),
+        'prefill_template': request.GET.get('template', ''),
+        'prefill_name': request.GET.get('name', ''),
+        'today_str': date_cls.today().strftime('%Y-%m-%d'),
+    })
+
+
+def approve_combined_event(work_event_id):
+    """Boshliq tasdiqlagach: ishchilarga vazifalar + mijozlarga e'lon yuboradi.
+
+    Bot handleridan sync_to_async orqali chaqiriladi. Tadbir nomini qaytaradi
+    (yoki None — topilmasa/allaqachon tasdiqlangan bo'lsa)."""
+    from apps.workers.models import WorkEvent
+    from apps.workers.views import _notify_new_tasks
+
+    we = WorkEvent.objects.filter(pk=work_event_id).first()
+    if not we or we.status == 'approved':
+        return None
+    we.status = 'approved'
+    we.save(update_fields=['status'])
+
+    # 1) Ishchilarga vazifalar (va checklist) — yaratish oqimidagi bilan bir xil
+    tasks = list(we.tasks.prefetch_related('workers').all())
+    try:
+        _notify_new_tasks(we, tasks)
+    except Exception as e:
+        print(f"[TASDIQ] ishchilarga yuborish xatosi: {e}")
+
+    # 2) Mijozlarga e'lon — nishon (guruh yoki 'hammaga') bo'lsa
+    ev = getattr(we, 'client_event', None)
+    if ev and (ev.send_groups.exists() or ev.send_to_all_users):
+        ev.sent = True
+        ev.save(update_fields=['sent'])
+        import threading
+        threading.Thread(target=_send_event_now_bg, args=(ev.id,), daemon=True).start()
+
+    return we.name
+
+
+def reject_combined_event(work_event_id):
+    """Boshliq rad etganda — 'rejected' qilib qo'yadi, hech narsa yuborilmaydi.
+
+    Saytda bildirishnoma chiqishi uchun rejection_seen=False qilamiz. Mijoz e'loni
+    ham nofaol qilinadi — adashib yuborilmasin.
+    """
+    from apps.workers.models import WorkEvent
+    we = WorkEvent.objects.filter(pk=work_event_id).first()
+    if not we:
+        return None
+    we.status = 'rejected'
+    we.rejection_seen = False
+    we.save(update_fields=['status', 'rejection_seen'])
+
+    # Bog'langan mijoz e'lonini nofaol qilamiz (yuborilmasin)
+    ev = getattr(we, 'client_event', None)
+    if ev and ev.is_active:
+        ev.is_active = False
+        ev.save(update_fields=['is_active'])
+
+    return we.name
+
+
+@login_required(login_url='/login/')
+def event_rejection_dismiss(request, pk):
+    """Dashboarddagi 'boshliq rad etdi' bildirishnomasini ko'rilgan deb belgilaydi."""
+    from apps.workers.models import WorkEvent
+    we = get_object_or_404(WorkEvent, pk=pk)
+    we.rejection_seen = True
+    we.save(update_fields=['rejection_seen'])
+    return redirect('dashboard')
+
+
 @login_required(login_url='/login/')
 def event_detail(request, pk):
     """Bitta tadbir va unga javob bergan foydalanuvchilar."""
@@ -315,9 +579,20 @@ def event_send_now(request, pk):
     """
     event = get_object_or_404(Event, pk=pk)
 
-    # Guruh/kanal tanlanmagan bo'lsa — yubormaymiz
-    if not event.send_groups.exists():
-        messages.error(request, "Iltimos, qaysi guruh yoki kanalga ketishini belgilang.")
+    # Boshliq tasdig'iga bog'langan tadbir — rad etilgan yoki hali tasdiqlanmagan bo'lsa yubormaymiz.
+    we = event.work_event
+    if we and we.status == 'rejected':
+        messages.error(request, "❌ Bu tadbir boshliq tomonidan RAD ETILGAN — yuborib bo'lmaydi.")
+        return redirect('events_list')
+    if we and we.status == 'pending':
+        messages.warning(request, "⏳ Bu tadbir hali boshliq tasdig'ini kutmoqda. Tasdiqlangach avtomatik yuboriladi.")
+        return redirect('events_list')
+
+    # Kamida bitta nishon bo'lishi kerak: guruh/kanal YOKI "hamma foydalanuvchi".
+    # Guruh tanlanmasa ham, foydalanuvchilarga yuborish yoqilgan bo'lsa — o'tadi.
+    if not event.send_groups.exists() and not event.send_to_all_users:
+        messages.error(request, "Yuborish uchun kamida bir guruh/kanal tanlang yoki "
+                                "\"Hamma foydalanuvchiga yuborilsin\" ni yoqing.")
         return redirect('event_edit', pk=event.pk)
 
     # Ikki marta yuborilmasligi uchun darhol 'sent' qilamiz (tugma yashiriladi)
@@ -378,10 +653,12 @@ def event_edit(request, pk):
     event = get_object_or_404(Event, pk=pk)
 
     if request.method == "POST":
-        # Guruh/kanal tanlash majburiy
+        # Kamida bitta nishon: guruh/kanal YOKI "hamma foydalanuvchi".
         group_ids = request.POST.getlist('send_groups')
-        if not group_ids:
-            messages.error(request, "Iltimos, qaysi guruh yoki kanalga ketishini belgilang.")
+        send_to_all = 'send_to_all_users' in request.POST
+        if not group_ids and not send_to_all:
+            messages.error(request, "Kamida bir guruh/kanal tanlang yoki "
+                                    "\"Hamma foydalanuvchiga yuborilsin\" ni yoqing.")
             return redirect('event_edit', pk=event.pk)
 
         venue_id = request.POST.get('venue_id')
@@ -407,7 +684,28 @@ def event_edit(request, pk):
 
         event.send_groups.set(group_ids)
 
-        # Faqat allaqachon yuborilgan tadbirlarni qayta yuboramiz.
+        # Boshliq tasdig'iga bog'langan tadbir RAD ETILGAN yoki TASDIQ KUTAYOTGAN bo'lsa —
+        # tahrirlab saqlash to'g'ridan-to'g'ri YUBORMAYDI, balki QAYTA boshliq tasdig'iga yuboradi.
+        we = event.work_event
+        if we and we.status in ('rejected', 'pending'):
+            from config.bot_notify import send_event_approval_request
+            we.status = 'pending'
+            we.rejection_seen = True   # eski "rad etildi" bildirishnomasi yopiladi
+            we.save(update_fields=['status', 'rejection_seen'])
+            # Tadbirni "hali yuborilmagan" holatiga qaytaramiz (adashib yuborilmasin)
+            event.sent = False
+            event.is_active = True
+            event.save(update_fields=['sent', 'is_active'])
+
+            sent = send_event_approval_request(we)
+            if sent:
+                messages.success(request, "✅ Tadbir yangilandi va boshliqqa QAYTA tasdiq uchun yuborildi.")
+            else:
+                messages.warning(request, "Tadbir yangilandi, lekin tasdiqlaydigan boshliq topilmadi "
+                                          "(Telegram ID li boshliq yo'q).")
+            return redirect('events_list')
+
+        # Faqat allaqachon yuborilgan (va tasdiqlangan/bog'lanmagan) tadbirlarni qayta yuboramiz.
         # (Hali yuborilmagan tadbir uchun tahrirlash — oddiy saqlash.)
         if event.sent:
             import threading
@@ -562,9 +860,16 @@ def event_checkin(request,pk):
        shu ID ga ega foydalanuvchi bu tadbirga 'keldi' deb belgilanadi.
        """
     from apps.users.models import User
+    from apps.trips.models import Trip
 
     event = get_object_or_404(Event, pk=pk)
     result = None
+
+    # Qaysi safar bo'yicha to'lov ko'rsatilsin (adashmaslik uchun oldindan tanlanadi).
+    # POST orqali (skan bilan birga) yoki GET orqali (select o'zgarganда) keladi.
+    selected_trip_id = request.POST.get('trip_id') or request.GET.get('trip') or ''
+    selected_trip = Trip.objects.filter(pk=selected_trip_id).first() if selected_trip_id else None
+    active_trips = Trip.objects.filter(is_active=True).order_by('-created_at')
 
     if request.method == 'POST':
         # Ikki xil forma: (1) ID/QR nazorati, (2) Lead (ro'yxatdan o'tmagan mehmon)
@@ -595,11 +900,21 @@ def event_checkin(request,pk):
             else:
                 user_event,created= UserEvent.objects.get_or_create(user=user,event=event)
                 if user_event.is_attendance:
-                    result = {'status':'warning','message':f"{user.full_name} allaqachon belgilangan😎."}
+                    status, msg = 'warning', f"{user.full_name} allaqachon belgilangan😎."
                 else:
                     user_event.is_attendance=True
                     user_event.save()
-                    result={'status':'success','message':f"{user.full_name} - keldi deb belgilandi😎"}
+                    status, msg = 'success', f"{user.full_name} - keldi deb belgilandi😎"
+                # QR skanda: shu odamning safar to'lov/qarz holatini chiqaramiz.
+                # Safar tanlangan bo'lsa — faqat o'sha safar bo'yicha (adashmaslik uchun).
+                result = {
+                    'status': status,
+                    'message': msg,
+                    'user_name': user.full_name or str(user),
+                    'user_id': user.unique_id,
+                    'trips': _user_trip_payments(user, trip_id=selected_trip_id or None),
+                    'selected_trip_name': selected_trip.name if selected_trip else '',
+                }
 
 #     Tadbirga kelganlar ruyxati
     attended = event.responses.filter(is_attendance=True).select_related('user','user__profile')
@@ -611,7 +926,36 @@ def event_checkin(request,pk):
         'result':result,
         'attended':attended,
         'leads':leads,
+        'active_trips': active_trips,
+        'selected_trip_id': selected_trip_id,
     })
+
+
+def _user_trip_payments(user, trip_id=None):
+    """Foydalanuvchining safar(lar)dagi to'lov/qarz holati (QR skanda ko'rsatish uchun).
+
+    trip_id berilsa — faqat o'sha safar bo'yicha. Aks holda barcha FAOL safarlar.
+    Har bir safar uchun: berishi kerak, to'langan (berdi + omonat), qoldiq (qarz).
+    """
+    from apps.trips.models import TripParticipant
+    parts = TripParticipant.objects.filter(user=user).select_related('trip')
+    if trip_id:
+        parts = parts.filter(trip_id=trip_id)
+    else:
+        parts = parts.filter(trip__is_active=True)
+    parts = parts.order_by('-trip__created_at')
+    rows = []
+    for p in parts:
+        rows.append({
+            'trip_name': p.trip.name,
+            'payment_status': p.get_payment_status_display() or '—',
+            'travel_status': p.get_travel_status_display() or '',
+            'must_pay': p.must_pay,
+            'paid_total': (p.paid or 0) + (p.deposit or 0),
+            'remaining': p.remaining,
+            'went': p.went,
+        })
+    return rows
 
 
 def normalize_phone(raw):

@@ -1,12 +1,12 @@
 {% extends 'base.html' %}
-{% block title %}Tadbirlar{% endblock %}
-{% block page_title %}Tadbirlar{% endblock %}
-{% block page_sub %}Jami {{ events.count }} ta tadbir{% endblock %}
+{% block title %}Tadbirlar tarixi{% endblock %}
+{% block page_title %}Tadbirlar tarixi{% endblock %}
+{% block page_sub %}{{ upcoming_count }} ta kelajakdagi · {{ past_count }} ta o'tib ketgan{% endblock %}
 
 {% block topbar_actions %}
-<button class="btn btn-primary" onclick="openModal('addEventModal')">
-    <i class="fas fa-plus"></i> Yangi tadbir
-</button>
+<a class="btn btn-primary" href="{% url 'event_wizard' %}">
+    <i class="fas fa-plus"></i> Tadbir yaratish
+</a>
 {% endblock %}
 
 {% block content %}
@@ -45,7 +45,14 @@
             </thead>
             <tbody>
                 {% for e in events %}
-                <tr>
+                {% if e.show_past_header %}
+                <tr class="section-divider">
+                    <td colspan="7" style="padding:14px 8px 6px; color:var(--text-secondary); font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:.5px;">
+                        <i class="fas fa-history"></i> O'tib ketgan tadbirlar
+                    </td>
+                </tr>
+                {% endif %}
+                <tr {% if e.is_past %}style="opacity:.55;"{% endif %}>
                     <td>
                         <div style="display:flex; align-items:center; gap:10px;">
                             {% if e.image %}
@@ -83,17 +90,25 @@
                     </td>
                     <td>
                         <div style="display:flex; flex-direction:column; gap:4px;">
-                            {% if e.sent %}
+                            {% if e.is_rejected %}
+                            <span class="badge badge-danger"><i class="fas fa-times-circle"></i> Boshliq rad etdi</span>
+                            {% elif e.is_pending %}
+                            <span class="badge badge-warning"><i class="fas fa-hourglass-half"></i> Tasdiq kutilmoqda</span>
+                            {% elif e.sent %}
                             <span class="badge badge-success"><i class="fas fa-check"></i> Yuborilgan</span>
                             {% else %}
                             <span class="badge badge-warning"><i class="fas fa-clock"></i> Kutilmoqda</span>
                             {% endif %}
-                            {% if e.is_active %}
-                            <span class="badge badge-info"><i class="fas fa-circle" style="font-size:7px;"></i> Faol</span>
-                            {% else %}
+                            {% if e.is_past %}
+                            <span class="badge" style="background:rgba(100,116,139,0.15); color:#94a3b8;">
+                                <i class="fas fa-history" style="font-size:9px;"></i> O'tib ketgan
+                            </span>
+                            {% elif not e.is_active %}
                             <span class="badge" style="background:rgba(100,116,139,0.15); color:#94a3b8;">
                                 <i class="fas fa-circle" style="font-size:7px;"></i> Nofaol
                             </span>
+                            {% else %}
+                            <span class="badge badge-info"><i class="fas fa-circle" style="font-size:7px;"></i> Faol</span>
                             {% endif %}
                         </div>
                     </td>
@@ -113,7 +128,7 @@
                                title="{% if e.is_active %}Nofaol qilish{% else %}Faollashtirish{% endif %}">
                                 <i class="fas fa-power-off"></i>
                             </a>
-                            {% if not e.sent %}
+                            {% if not e.sent and not e.is_rejected and not e.is_pending %}
                             <a href="{% url 'event_send_now' e.id %}" class="btn btn-primary btn-sm btn-icon" title="Yuborish"
                                onclick="return confirm('Tadbir hozir yuborilsinmi?')">
                                 <i class="fas fa-paper-plane"></i>
@@ -288,10 +303,37 @@
 
 {% block scripts %}
 <script>
+// Ogohlantirish (bloklamaydi): OK bosilsa oynada qoladi, qayta bosilsa yuboriladi.
+var addWarnedKey = null;
 function checkGroupsSelected(form) {
-    var checked = form.querySelectorAll('input[name="send_groups"]:checked').length;
-    if (checked === 0) {
-        alert("Iltimos, qaysi guruh yoki kanalga ketishini belgilang.");
+    var groups = form.querySelectorAll('input[name="send_groups"]:checked').length;
+    var allBox = form.querySelector('input[name="send_to_all_users"]');
+    var allUsers = allBox && allBox.checked;
+    var key = (groups > 0 ? 'g' : '') + (allUsers ? 'u' : '');
+
+    if (groups === 0 && !allUsers) {
+        alert("❗ Hech qanday nishon belgilanmadi — na guruh/kanal, na foydalanuvchi.\n"
+            + "Iltimos, kamida bittasini belgilang.");
+        addWarnedKey = null;
+        return false;
+    }
+
+    var msg = null;
+    if (groups === 0 && allUsers) {
+        msg = "⚠️ Guruh/kanal belgilanmadi.\n"
+            + "Tadbir FAQAT foydalanuvchilarga yuboriladi.\n\n"
+            + "Guruh qo'shmoqchi bo'lsangiz — OK bosib oynaga qayting.\n"
+            + "Shundayam yuborish uchun \"Saqlash\" tugmasini yana bosing.";
+    } else if (groups > 0 && !allUsers) {
+        msg = "⚠️ Foydalanuvchilar belgilanmadi.\n"
+            + "Tadbir FAQAT guruh/kanalga yuboriladi.\n\n"
+            + "Foydalanuvchilarga ham yubormoqchi bo'lsangiz — OK bosib oynaga qayting.\n"
+            + "Shundayam yuborish uchun \"Saqlash\" tugmasini yana bosing.";
+    }
+
+    if (msg && addWarnedKey !== key) {
+        alert(msg);
+        addWarnedKey = key;
         return false;
     }
     return true;

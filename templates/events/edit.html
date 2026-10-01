@@ -149,22 +149,38 @@
 
 {% block scripts %}
 <script>
+// Bu tadbir boshliq rad etgan yoki tasdiq kutayotgan bo'lsa — saqlash QAYTA tasdiqqa yuboradi.
+var needsReapproval = {{ event.is_rejected|yesno:"true,false" }} || {{ event.is_pending|yesno:"true,false" }};
+
 function confirmEditSave(form) {
     var boxes = form.querySelectorAll('input[name="send_groups"]:checked');
-    if (boxes.length === 0) {
-        alert("Iltimos, qaysi guruh yoki kanalga ketishini belgilang.");
+    var usersBox = form.querySelector('input[name="send_to_all_users"]');
+    var usersYes = usersBox && usersBox.checked;
+
+    // Kamida bitta nishon: guruh YOKI foydalanuvchi
+    if (boxes.length === 0 && !usersYes) {
+        alert("Kamida bitta guruh/kanal tanlang yoki \"Hamma foydalanuvchiga yuborilsin\" ni belgilang.");
         return false;
     }
+
     var names = [];
     boxes.forEach(function (b) {
         var t = b.parentElement.querySelector('.chip-title');
         names.push("  • " + (t ? t.textContent.trim() : b.value));
     });
-    var usersBox = form.querySelector('input[name="send_to_all_users"]');
-    var usersYes = usersBox && usersBox.checked;
+    var groupsTxt = names.length ? names.join("\n") : "  (yo'q)";
+
+    if (needsReapproval) {
+        return confirm(
+            "Bu tadbir boshliq tomonidan hali TASDIQLANMAGAN.\n\n"
+            + "Saqlaganingizda to'g'ridan-to'g'ri yuborilmaydi — boshliqqa QAYTA tasdiq uchun yuboriladi.\n"
+            + "Boshliq tasdiqlagach ishchilarga va mijozlarga ketadi.\n\n"
+            + "Davom etilsinmi?"
+        );
+    }
 
     var msg = "O'zgarish quyidagilarga yuboriladi:\n\n"
-        + "📢 Guruh / kanal:\n" + names.join("\n") + "\n\n"
+        + "📢 Guruh / kanal:\n" + groupsTxt + "\n\n"
         + "👥 Foydalanuvchilarga: " + (usersYes ? "HA" : "YO'Q") + "\n\n"
         + "Eski xabar o'chirilib, yangisi yuboriladi.\nDavom etilsinmi?";
     return confirm(msg);

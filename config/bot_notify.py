@@ -47,6 +47,8 @@ def send_event_message(chat_id, text, event_id, image_url=None, image_path=None,
     bot_link = f"https://t.me/{bot_username}" if bot_username else "https://t.me/MBC_platforum_bot"
     t_url = telegraph_url if telegraph_url else "https://telegra.ph/"
 
+    # Eslatma: kalendarga qo'shish havolasi endi xabar MATNIDA (build_event_text), tugma emas.
+
     if is_group:
         # Guruh/kanalga — ovozlarni ko'rish (Telegraph) tugmasi
         keyboard = {
@@ -228,6 +230,13 @@ def build_event_text(event):
         lines.append(f'🗺 <a href="{map_url}">Xaritada ko\'rish</a>')
     else:
         lines.append(f"📍 <b>Manzil:</b> {event.location}")
+
+    # Tadbirni telefon kalendariga qo'shish havolasi (har tadbir uchun alohida .ics).
+    site_url = getattr(settings, 'SITE_URL', 'https://mbc-platform.duckdns.org').rstrip('/')
+    cal_url = f"{site_url}/events/{event.id}/calendar.ics"
+    lines.append("")
+    lines.append("📅 <b>Tadbirni kalendarga qo'shish uchun link ustidan bosing:</b>")
+    lines.append(f'<a href="{cal_url}">{cal_url}</a>')
 
     lines.append("─" * 20)
     lines.append("")
@@ -903,3 +912,104 @@ def send_tasks_summary(worker_tg_id,event_name,event_date,task_count,event_id,is
     except Exception as e:
         print(f"Xulosa yuborish xatosi: {e}")
         return None
+
+
+def send_event_approval_request(work_event):
+    """Birlashgan tadbir yaratilganda boshliq(lar)ga tasdiq so'rovini yuboradi.
+
+    Boshliq ✅/❌ tugmasi bilan tasdiqlaydi yoki rad etadi (worker bot orqali).
+    (chat_id, message_id) ro'yxatini qaytaradi.
+    """
+    import html
+    token = settings.WORKER_BOT_TOKEN
+    if not token:
+        print("WORKER_BOT_TOKEN yo'q!")
+        return []
+
+    from apps.workers.models import Worker
+
+    # Tasdiq FAQAT boshliqqa boradi (adminga emas — user shuni so'radi 2026-09-29)
+    bosses = list(Worker.objects.filter(role='boss')
+                  .exclude(telegram_id__isnull=True))
+    if not bosses:
+        print("Tasdiqlaydigan boshliq (role='boss', telegram_id li) topilmadi.")
+        return []
+
+    ev = getattr(work_event, 'client_event', None)
+    task_count = work_event.tasks.count()
+
+    def _fmt(value, fmt, cut):
+        # Yangi yaratilgan obyektда maydon hali string bo'lishi mumkin (DB'dan o'qilmagan)
+        if not value:
+            return '—'
+        try:
+            return value.strftime(fmt)
+        except AttributeError:
+            return str(value)[:cut]
+
+    date_str = _fmt(work_event.event_date, '%d.%m.%Y', 10)
+    time_str = _fmt(work_event.event_time, '%H:%M', 5)
+    tpl_part = f"  ·  🧩 {html.escape(work_event.template.name)}" if work_event.template else ""
+
+    lines = [
+        "🆕 <b>YANGI TADBIR — TASDIQ KUTILMOQDA</b>",
+        "━━━━━━━━━━━━━━━━━━",
+        f"🎯 <b>{html.escape(work_event.name)}</b>",
+        f"📅 {date_str}   🕒 {time_str}",
+        "",
+        "👥 <b>Ishchilar qismi</b>",
+        f"   📋 Vazifalar: <b>{task_count} ta</b>{tpl_part}",
+    ]
+    if ev:
+        groups = ", ".join(g.title for g in ev.send_groups.all()) or "—"
+        all_txt = "ha" if ev.send_to_all_users else "yo'q"
+        desc = (ev.description or "").strip()
+        if len(desc) > 160:
+            desc = desc[:160] + "…"
+        lines += ["", "📣 <b>Mijozlar e'loni</b>"]
+        if ev.theme:
+            lines.append(f"   🏷 {html.escape(ev.theme)}")
+        if ev.speaker:
+            lines.append(f"   🎤 {html.escape(ev.speaker)}")
+        if ev.location:
+            lines.append(f"   📍 {html.escape(ev.location)}")
+        lines.append(f"   👤 Hammaga: {all_txt}  ·  📢 {html.escape(groups)}")
+        if desc:
+            lines += ["", f"<i>{html.escape(desc)}</i>"]
+
+    lines += ["", "Tasdiqlasangiz — ishchilarga vazifalar va mijozlarga e'lon yuboriladi."]
+    text = "\n".join(lines)
+
+    keyboard = {"inline_keyboard": [[
+        {"text": "✅ Tasdiqlash", "callback_data": f"evapp:ok:{work_event.id}"},
+        {"text": "❌ Rad etish", "callback_data": f"evapp:no:{work_event.id}"},
+    ]]}
+
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    payload = {
+        'chat_id': None, 'text': text,
+        'parse_mode': 'HTML', 'reply_markup': keyboard,
+    }
+    sent = []
+    for b in bosses:
+        payload['chat_id'] = b.telegram_id
+        resp = None
+        last_err = None
+        # Tarmoq sekin bo'lsa timeout bo'lmasin — 3 marta urinamiz (connect 10s, read 30s)
+        for attempt in range(3):
+            try:
+                r = requests.post(url, json=payload, timeout=(10, 30))
+                resp = r.json()
+                break
+            except Exception as e:
+                last_err = e
+                print(f"Tasdiq so'rovi urinishi {attempt + 1}/3 muvaffaqiyatsiz ({b.telegram_id}): {e}")
+                time.sleep(2)
+        if resp is None:
+            print(f"Tasdiq so'rovi yuborilmadi ({b.telegram_id}): {last_err}")
+            continue
+        if resp.get('ok'):
+            sent.append((b.telegram_id, resp['result']['message_id']))
+        else:
+            print(f"[TASDIQ SO'ROV XATO] {resp}")
+    return sent
