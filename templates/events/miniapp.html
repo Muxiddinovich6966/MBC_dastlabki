@@ -428,7 +428,7 @@
         '<div class="d-name">' + esc(e.name) + '</div>' +
         '<div style="margin-top:12px">' + rows + '</div>' +
         (e.description ? '<div class="d-desc">' + esc(e.description) + '</div>' : '') +
-        (hasLocation(e) ? '<a class="btn ghost" id="mapBtn" href="' + esc(geoUrl(e)) + '">📍 Xaritada ochish</a>' : '') +
+        (hasLocation(e) ? '<button class="btn ghost" id="mapBtn">📍 Xaritada ochish</button>' : '') +
         (e.is_past ? '' : '<button class="btn" id="closeBtn">✍️ Botga qaytish</button>') +
       '</div>';
 
@@ -439,11 +439,7 @@
     document.getElementById('backBtn').addEventListener('click', closeDetail);
 
     var mb = document.getElementById('mapBtn');
-    if (mb) mb.addEventListener('click', function () {
-      // geo: havolasi telefonga "qaysi ilovada ochish" tanlovini beradi.
-      // Anchor o'zi navigatsiya qiladi; bu yerda faqat haptic.
-      haptic('medium');
-    });
+    if (mb) mb.addEventListener('click', function () { openMap(e); });
 
     var cb = document.getElementById('closeBtn');
     if (cb) cb.addEventListener('click', function () {
@@ -476,6 +472,41 @@
   }
   function hasLocation(e) {
     return !!((e.lat && e.lon) || e.venue_name || e.venue_address);
+  }
+  // Brauzer uchun zaxira havola: aniq koordinataga pin qo'yadi (yonidagi joyni emas)
+  function webMapUrl(e) {
+    if (e.lat && e.lon) {
+      return 'https://www.google.com/maps/search/?api=1&query=' + e.lat + ',' + e.lon;
+    }
+    var addr = [e.venue_name, e.venue_address].filter(function (x) { return !!x; }).join(', ');
+    return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(addr);
+  }
+  // Xaritani xavfsiz ochish: sahifani ALMASHTIRMAYMIZ (shu sabab avval webview qotib qolardi).
+  // 1) geo: -> yashirin iframe orqali -> telefon "qaysi ilovada ochish" so'raydi.
+  // 2) Ochilmasa (sahifa hali ko'rinib tursa) -> brauzerda Google xarita.
+  function openMap(e) {
+    haptic('medium');
+    var moved = false;
+    function onLeave() { moved = true; }
+    window.addEventListener('blur', onLeave);
+    document.addEventListener('visibilitychange', onLeave);
+
+    try {
+      var ifr = document.createElement('iframe');
+      ifr.style.cssText = 'display:none;width:0;height:0;border:0';
+      ifr.src = geoUrl(e);
+      document.body.appendChild(ifr);
+      setTimeout(function () { try { document.body.removeChild(ifr); } catch (_) {} }, 2000);
+    } catch (err) {}
+
+    setTimeout(function () {
+      window.removeEventListener('blur', onLeave);
+      document.removeEventListener('visibilitychange', onLeave);
+      if (!moved && !document.hidden) {
+        var web = webMapUrl(e);
+        if (tg && tg.openLink) tg.openLink(web); else window.open(web, '_blank');
+      }
+    }, 2500);
   }
   function pad(n) { return (n < 10 ? '0' : '') + n; }
   function startOfDay(d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
