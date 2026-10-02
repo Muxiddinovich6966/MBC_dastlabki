@@ -68,13 +68,15 @@
     background:transparent;color:var(--txt-2);cursor:pointer;transition:.12s}
   .day.pad{opacity:.16;pointer-events:none}
   .day.today{outline:1.5px solid var(--gold);outline-offset:-1.5px;color:var(--gold-soft);font-weight:700}
-  .day.has{background:var(--card2);color:var(--txt)}
-  .day.sel{background:linear-gradient(135deg,var(--gold),var(--gold-2));
-    color:#1a1611;font-weight:700;box-shadow:0 4px 12px rgba(227,188,77,.35)}
+  .day.has{background:rgba(226,32,32,.16);color:var(--red-soft);font-weight:700;
+    border:1px solid rgba(226,32,32,.35)}
+  .day.past-dot{background:var(--card2);color:var(--txt);border-color:var(--line)}
+  .day.sel{background:linear-gradient(135deg,var(--red),#b81717);
+    color:#fff;font-weight:700;border:none;box-shadow:0 4px 14px rgba(226,32,32,.4)}
   .dot{position:absolute;bottom:5px;left:50%;transform:translateX(-50%);
-    width:5px;height:5px;border-radius:50%;background:var(--gold)}
+    width:5px;height:5px;border-radius:50%;background:var(--red)}
   .day.past-dot .dot{background:var(--muted)}
-  .day.sel .dot{background:#1a1611}
+  .day.sel .dot{background:#fff}
 
   .sub{margin:18px 0 10px;font-size:12px;color:var(--muted);font-weight:700;
     text-transform:uppercase;letter-spacing:.8px}
@@ -426,7 +428,7 @@
         '<div class="d-name">' + esc(e.name) + '</div>' +
         '<div style="margin-top:12px">' + rows + '</div>' +
         (e.description ? '<div class="d-desc">' + esc(e.description) + '</div>' : '') +
-        ((e.lat && e.lon) ? '<button class="btn ghost" id="mapBtn">🗺 Xaritada ko\'rish</button>' : '') +
+        (hasLocation(e) ? '<a class="btn ghost" id="mapBtn" href="' + esc(geoUrl(e)) + '">📍 Xaritada ochish</a>' : '') +
         (e.is_past ? '' : '<button class="btn" id="closeBtn">✍️ Botga qaytish</button>') +
       '</div>';
 
@@ -438,8 +440,9 @@
 
     var mb = document.getElementById('mapBtn');
     if (mb) mb.addEventListener('click', function () {
-      var url = 'https://maps.google.com/?q=' + e.lat + ',' + e.lon;
-      if (tg && tg.openLink) tg.openLink(url); else window.open(url, '_blank');
+      // geo: havolasi telefonga "qaysi ilovada ochish" tanlovini beradi.
+      // Anchor o'zi navigatsiya qiladi; bu yerda faqat haptic.
+      haptic('medium');
     });
 
     var cb = document.getElementById('closeBtn');
@@ -461,6 +464,19 @@
   }
 
   /* ---------- utils ---------- */
+  // geo: URI -> telefon "qaysi ilovada ochish" so'raydi + pinni nom bilan belgilaydi
+  function geoUrl(e) {
+    var label = e.name || e.venue_name || 'Tadbir';
+    if (e.lat && e.lon) {
+      return 'geo:' + e.lat + ',' + e.lon +
+             '?q=' + e.lat + ',' + e.lon + '(' + encodeURIComponent(label) + ')';
+    }
+    var addr = [e.venue_name, e.venue_address].filter(function (x) { return !!x; }).join(', ');
+    return 'geo:0,0?q=' + encodeURIComponent(addr);
+  }
+  function hasLocation(e) {
+    return !!((e.lat && e.lon) || e.venue_name || e.venue_address);
+  }
   function pad(n) { return (n < 10 ? '0' : '') + n; }
   function startOfDay(d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
   function isoOf(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
