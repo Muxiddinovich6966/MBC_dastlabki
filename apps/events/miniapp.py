@@ -157,7 +157,7 @@ def miniapp_events(request):
     tg_user = verify_init_data(init_data,token) if init_data else None
 
     itmes = []
-    for e in Event.objects.all().select_related():
+    for e in Event.objects.all().select_related('venue'):
         row = _event_json(request, e)
         if row ['date']:
             itmes.append(row)

@@ -225,6 +225,36 @@
     try { tg.HapticFeedback.impactOccurred(t || 'light'); } catch (e) {}
   }
 
+  /* ---------- Debug konsoli ----------
+     Logoni 5 marta ketma-ket bossangiz (yoki URL ga ?debug qo'shsangiz)
+     telefonning o'zida xato/tarmoq loglarini ko'rsatuvchi konsol ochiladi. */
+  function loadDebugConsole() {
+    if (window.__dbg) { try { eruda.show(); } catch (e) {} return; }
+    window.__dbg = true;
+    var s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/eruda';
+    s.onload = function () { try { eruda.init(); eruda.show(); } catch (e) {} };
+    document.body.appendChild(s);
+  }
+  window.addEventListener('error', function (ev) {
+    try { console.log('JS ERROR:', ev.message, '@', ev.filename + ':' + ev.lineno); } catch (e) {}
+  });
+  window.addEventListener('unhandledrejection', function (ev) {
+    try { console.log('PROMISE REJECT:', ev.reason); } catch (e) {}
+  });
+  if (/[?&]debug/.test(location.search)) loadDebugConsole();
+  (function () {
+    var b = document.querySelector('.brand');
+    if (!b) return;
+    var n = 0, last = 0;
+    b.addEventListener('click', function () {
+      var now = Date.now();
+      if (now - last > 800) n = 0;
+      last = now; n++;
+      if (n >= 5) { n = 0; haptic('medium'); loadDebugConsole(); }
+    });
+  })();
+
   /* ---------- Tabs ---------- */
   var tabs = document.querySelectorAll('.tab');
   for (var i = 0; i < tabs.length; i++) {
@@ -255,8 +285,20 @@
     var headers = {};
     if (tg && tg.initData) headers['X-Telegram-Init-Data'] = tg.initData;
 
-    fetch(API_URL, { headers: headers, credentials: 'same-origin' })
+    // Timeout: server 15s javob bermasa, cheksiz qotib qolmasin
+    var ctrl = null, timer = null;
+    try {
+      ctrl = new AbortController();
+      timer = setTimeout(function () { try { ctrl.abort(); } catch (e) {} }, 15000);
+    } catch (e) {}
+
+    fetch(API_URL, {
+        headers: headers,
+        credentials: 'same-origin',
+        signal: ctrl ? ctrl.signal : undefined
+      })
       .then(function (r) {
+        if (timer) clearTimeout(timer);
         if (!r.ok) throw new Error('HTTP ' + r.status);
         return r.json();
       })
@@ -284,7 +326,9 @@
         renderUpcoming();
         renderCal();
       })
-      .catch(function () {
+      .catch(function (err) {
+        if (timer) clearTimeout(timer);
+        try { console.log('LOAD ERROR:', err && (err.name + ': ' + err.message)); } catch (e) {}
         document.getElementById('upList').innerHTML =
           '<div class="empty">Ma\'lumotni yuklab bo\'lmadi.<br>' +
           'Internetni tekshirib ko\'ring.' +
@@ -484,7 +528,8 @@
   }
   // Har bir xarita ilovasi uchun to'g'ri havola (pin + tadbir nomi bilan)
   function mapLinks(e) {
-    var label = e.name || e.venue_name || 'Tadbir';
+    // Pin yorlig'i: avval manzil (venue) nomi, bo'lmasa tadbir nomi
+    var label = e.venue_name || e.venue_address || e.name || 'Tadbir';
     var enc = encodeURIComponent(label);
     if (e.lat && e.lon) {
       return [
