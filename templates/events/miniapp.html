@@ -1,112 +1,143 @@
 <!DOCTYPE html>
+{% load static %}
 <html lang="uz">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>MBC — Tadbirlar</title>
+<title>M Faktor — Tadbirlar</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
   :root{
-    --bg:#0b0b0d; --card:#15151a; --card2:#1d1d24; --line:#2a2a33;
-    --gold:#d4af37; --gold-soft:#f0d98a; --txt:#f5f5f7; --muted:#9a9aa6;
+    --bg:#0a0a0c; --bg2:#101014; --card:#16161c; --card2:#1f1f27; --line:#2c2c37;
+    --gold:#e3bc4d; --gold-2:#c99a2e; --gold-soft:#f5e3a8;
+    --red:#e22020; --red-soft:#ff4d4d;
+    --txt:#f6f6f9; --txt-2:#d6d6df; --muted:#8e8e9c;
+    --shadow:0 10px 30px rgba(0,0,0,.45);
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   html,body{margin:0;padding:0;background:var(--bg);color:var(--txt);
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
-    font-size:15px;line-height:1.45;overscroll-behavior-y:contain}
-  body{padding:0 0 28px}
+    font-size:15px;line-height:1.45;overscroll-behavior-y:contain;
+    -webkit-font-smoothing:antialiased}
+  body{padding:0 0 32px}
 
-  .hdr{padding:18px 16px 12px;text-align:center;
-    background:linear-gradient(180deg,#141418 0%,var(--bg) 100%)}
-  .logo{font-size:22px;font-weight:800;letter-spacing:3px;color:var(--gold)}
-  .logo span{color:var(--txt)}
-  .hello{margin-top:4px;font-size:13px;color:var(--muted)}
+  /* ---------- Header ---------- */
+  .hdr{position:relative;padding:22px 16px 16px;text-align:center;overflow:hidden;
+    background:
+      radial-gradient(120% 120% at 50% -20%,rgba(227,188,77,.12) 0%,transparent 60%),
+      linear-gradient(180deg,#141419 0%,var(--bg) 100%)}
+  .hdr::after{content:"";position:absolute;left:0;right:0;bottom:0;height:1px;
+    background:linear-gradient(90deg,transparent,rgba(227,188,77,.5),transparent)}
+  .brand{display:inline-flex;align-items:center;justify-content:center;
+    padding:12px 22px;border-radius:18px;
+    background:linear-gradient(180deg,#ffffff,#f1f1f3);
+    box-shadow:0 8px 22px rgba(226,32,32,.18),inset 0 1px 0 rgba(255,255,255,.9)}
+  .brand img{display:block;height:40px;width:auto}
+  .hello{margin-top:12px;font-size:14px;font-weight:600;color:var(--txt-2)}
+  .tagline{margin-top:3px;font-size:11.5px;letter-spacing:2.5px;
+    text-transform:uppercase;color:var(--muted);font-weight:600}
 
-  .tabs{display:flex;gap:8px;padding:0 16px 14px}
+  /* ---------- Tabs ---------- */
+  .tabs{display:flex;gap:6px;margin:16px 16px 14px;padding:5px;border-radius:16px;
+    background:var(--card);border:1px solid var(--line)}
   .tab{flex:1;padding:10px 0;text-align:center;border-radius:12px;
-    background:var(--card);border:1px solid var(--line);color:var(--muted);
-    font-size:13px;font-weight:600;cursor:pointer;transition:.15s}
-  .tab.on{background:linear-gradient(135deg,#d4af37,#b8912b);color:#1a1a1a;border-color:transparent}
+    color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;transition:.2s}
+  .tab.on{background:linear-gradient(135deg,var(--gold),var(--gold-2));
+    color:#1a1611;box-shadow:0 4px 14px rgba(227,188,77,.3)}
 
   .wrap{padding:0 16px}
-  .pane{display:none}
+  .pane{display:none;animation:fade .25s ease}
   .pane.on{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 
-  .cal{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px}
-  .cal-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
-  .cal-title{font-size:16px;font-weight:700}
-  .nav{width:34px;height:34px;border-radius:10px;background:var(--card2);
-    border:1px solid var(--line);color:var(--gold);font-size:17px;display:flex;
-    align-items:center;justify-content:center;cursor:pointer;flex:0 0 34px}
+  /* ---------- Calendar ---------- */
+  .cal{background:var(--card);border:1px solid var(--line);border-radius:18px;
+    padding:16px;box-shadow:var(--shadow)}
+  .cal-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+  .cal-title{font-size:16px;font-weight:700;color:var(--txt)}
+  .nav{width:36px;height:36px;border-radius:11px;background:var(--card2);
+    border:1px solid var(--line);color:var(--gold);font-size:18px;display:flex;
+    align-items:center;justify-content:center;cursor:pointer;flex:0 0 36px;transition:.15s}
+  .nav:active{transform:scale(.9);background:var(--line)}
   .dow{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:6px}
-  .dow div{text-align:center;font-size:11px;color:var(--muted);font-weight:600}
+  .dow div{text-align:center;font-size:11px;color:var(--muted);font-weight:700;
+    text-transform:uppercase;letter-spacing:.5px}
   .grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
-  .day{aspect-ratio:1/1;border-radius:10px;display:flex;align-items:center;
-    justify-content:center;font-size:13px;position:relative;
-    background:transparent;color:var(--txt);cursor:pointer}
-  .day.pad{opacity:.18;pointer-events:none}
-  .day.today{outline:1px solid var(--gold);outline-offset:-1px}
-  .day.has{background:var(--card2)}
-  .day.sel{background:linear-gradient(135deg,#d4af37,#b8912b);color:#1a1a1a;font-weight:700}
+  .day{aspect-ratio:1/1;border-radius:11px;display:flex;align-items:center;
+    justify-content:center;font-size:13.5px;position:relative;
+    background:transparent;color:var(--txt-2);cursor:pointer;transition:.12s}
+  .day.pad{opacity:.16;pointer-events:none}
+  .day.today{outline:1.5px solid var(--gold);outline-offset:-1.5px;color:var(--gold-soft);font-weight:700}
+  .day.has{background:var(--card2);color:var(--txt)}
+  .day.sel{background:linear-gradient(135deg,var(--gold),var(--gold-2));
+    color:#1a1611;font-weight:700;box-shadow:0 4px 12px rgba(227,188,77,.35)}
   .dot{position:absolute;bottom:5px;left:50%;transform:translateX(-50%);
     width:5px;height:5px;border-radius:50%;background:var(--gold)}
   .day.past-dot .dot{background:var(--muted)}
-  .day.sel .dot{background:#1a1a1a}
+  .day.sel .dot{background:#1a1611}
 
-  .sub{margin:16px 0 8px;font-size:12px;color:var(--muted);font-weight:600;
-    text-transform:uppercase;letter-spacing:.5px}
+  .sub{margin:18px 0 10px;font-size:12px;color:var(--muted);font-weight:700;
+    text-transform:uppercase;letter-spacing:.8px}
 
+  /* ---------- Event card ---------- */
   .ev{display:flex;gap:12px;background:var(--card);border:1px solid var(--line);
-    border-radius:14px;padding:12px;margin-bottom:10px;cursor:pointer;
-    transition:.15s;align-items:center}
-  .ev:active{transform:scale(.985)}
-  .ev.past{opacity:.55}
-  .ev-date{flex:0 0 52px;text-align:center;background:var(--card2);
-    border-radius:10px;padding:7px 0;border:1px solid var(--line)}
-  .ev-d{font-size:19px;font-weight:800;color:var(--gold);line-height:1}
-  .ev-m{font-size:10px;color:var(--muted);text-transform:uppercase;margin-top:3px}
+    border-radius:16px;padding:13px;margin-bottom:11px;cursor:pointer;
+    transition:.18s;align-items:center;box-shadow:0 4px 16px rgba(0,0,0,.28)}
+  .ev:active{transform:scale(.98);border-color:var(--gold-2)}
+  .ev.past{opacity:.5}
+  .ev-date{flex:0 0 54px;text-align:center;border-radius:12px;padding:8px 0;
+    background:linear-gradient(160deg,var(--card2),#16161c);
+    border:1px solid var(--line)}
+  .ev-d{font-size:20px;font-weight:800;color:var(--gold);line-height:1}
+  .ev-m{font-size:10px;color:var(--muted);text-transform:uppercase;margin-top:3px;font-weight:600}
   .ev-body{min-width:0;flex:1}
-  .ev-name{font-weight:700;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .ev-meta{font-size:12px;color:var(--muted);margin-top:3px;overflow:hidden;
+  .ev-name{font-weight:700;font-size:15px;color:var(--txt);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ev-meta{font-size:12.5px;color:var(--muted);margin-top:4px;overflow:hidden;
     text-overflow:ellipsis;white-space:nowrap}
-  .ev-arrow{color:var(--line);font-size:18px}
-  .badge{display:inline-block;font-size:10px;padding:2px 7px;border-radius:99px;
-    background:rgba(212,175,55,.14);color:var(--gold-soft);margin-left:6px;vertical-align:1px}
+  .ev-arrow{color:var(--gold-2);font-size:20px;opacity:.6}
+  .badge{display:inline-block;font-size:10px;padding:2px 8px;border-radius:99px;
+    background:rgba(226,32,32,.16);color:var(--red-soft);margin-left:6px;
+    vertical-align:1px;font-weight:700}
 
-  .empty{text-align:center;color:var(--muted);padding:24px 10px;font-size:13.5px}
-  .retry{display:inline-block;margin-top:10px;padding:9px 18px;border-radius:10px;
+  .empty{text-align:center;color:var(--muted);padding:28px 12px;font-size:13.5px}
+  .retry{display:inline-block;margin-top:12px;padding:10px 20px;border-radius:12px;
     background:var(--card2);border:1px solid var(--line);color:var(--gold);
     font-size:13px;font-weight:600;cursor:pointer}
 
+  /* ---------- Detail ---------- */
   #detail{position:fixed;inset:0;background:var(--bg);z-index:50;overflow-y:auto;
     display:none;padding-bottom:40px}
-  #detail.on{display:block}
+  #detail.on{display:block;animation:fade .25s ease}
   .d-img{width:100%;aspect-ratio:16/9;object-fit:cover;background:var(--card2);display:block}
-  .d-pad{padding:16px}
-  .d-name{font-size:20px;font-weight:800;line-height:1.25}
-  .d-row{display:flex;gap:10px;align-items:flex-start;padding:11px 0;border-bottom:1px solid var(--line)}
-  .d-ico{flex:0 0 22px;text-align:center;font-size:15px}
-  .d-lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
-  .d-val{font-size:14.5px;margin-top:1px;word-break:break-word}
-  .d-desc{margin-top:14px;font-size:14.5px;color:#dcdce2;white-space:pre-wrap}
-  .btn{display:block;width:100%;margin-top:14px;padding:14px;border-radius:14px;
-    background:linear-gradient(135deg,#d4af37,#b8912b);color:#1a1a1a;
-    font-weight:800;font-size:15px;text-align:center;border:none;cursor:pointer}
-  .btn.ghost{background:var(--card);color:var(--gold);border:1px solid var(--line)}
+  .d-pad{padding:18px 16px}
+  .d-name{font-size:21px;font-weight:800;line-height:1.25;color:var(--txt)}
+  .d-row{display:flex;gap:11px;align-items:flex-start;padding:12px 0;border-bottom:1px solid var(--line)}
+  .d-ico{flex:0 0 24px;text-align:center;font-size:16px}
+  .d-lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;font-weight:600}
+  .d-val{font-size:14.5px;margin-top:2px;word-break:break-word;color:var(--txt-2)}
+  .d-desc{margin-top:16px;font-size:14.5px;color:var(--txt-2);white-space:pre-wrap;line-height:1.6}
+  .btn{display:block;width:100%;margin-top:14px;padding:15px;border-radius:14px;
+    background:linear-gradient(135deg,var(--gold),var(--gold-2));color:#1a1611;
+    font-weight:800;font-size:15px;text-align:center;border:none;cursor:pointer;
+    box-shadow:0 6px 18px rgba(227,188,77,.3)}
+  .btn.ghost{background:var(--card);color:var(--gold);border:1px solid var(--line);box-shadow:none}
   .back{display:inline-flex;align-items:center;gap:6px;color:var(--gold);
-    font-size:14px;padding:14px 16px 0;cursor:pointer}
+    font-size:14px;font-weight:600;padding:16px 16px 0;cursor:pointer}
 
-  .skel{height:66px;border-radius:14px;background:
+  .skel{height:70px;border-radius:16px;background:
     linear-gradient(90deg,var(--card) 25%,var(--card2) 50%,var(--card) 75%);
-    background-size:200% 100%;animation:sh 1.2s infinite;margin-bottom:10px}
+    background-size:200% 100%;animation:sh 1.2s infinite;margin-bottom:11px}
   @keyframes sh{0%{background-position:200% 0}100%{background-position:-200% 0}}
 </style>
 </head>
 <body>
 
 <div class="hdr">
-  <div class="logo">M<span>B</span>C</div>
-  <div class="hello" id="hello">Tadbirlar taqvimi</div>
+  <div class="brand">
+    <img src="{% static 'images/mfaktor.png' %}" alt="M Faktor">
+  </div>
+  <div class="hello" id="hello">Xush kelibsiz!</div>
+  <div class="tagline">Tadbirlar taqvimi</div>
 </div>
 
 <div class="tabs">
@@ -164,8 +195,8 @@
   if (tg) {
     try { tg.ready(); } catch (e) {}
     try { tg.expand(); } catch (e) {}
-    try { tg.setHeaderColor('#0b0b0d'); } catch (e) {}
-    try { tg.setBackgroundColor('#0b0b0d'); } catch (e) {}
+    try { tg.setHeaderColor('#0a0a0c'); } catch (e) {}
+    try { tg.setBackgroundColor('#0a0a0c'); } catch (e) {}
     try { tg.disableVerticalSwipes(); } catch (e) {}
     try { tg.BackButton.onClick(closeDetail); } catch (e) {}
   }
