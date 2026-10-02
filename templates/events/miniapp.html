@@ -126,6 +126,25 @@
   .back{display:inline-flex;align-items:center;gap:6px;color:var(--gold);
     font-size:14px;font-weight:600;padding:16px 16px 0;cursor:pointer}
 
+  /* ---------- Map chooser (bottom sheet) ---------- */
+  .sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:60;display:none;
+    align-items:flex-end;animation:fade .2s ease}
+  .sheet-bg.on{display:flex}
+  .sheet{width:100%;background:var(--card);border-radius:22px 22px 0 0;
+    border-top:1px solid var(--line);padding:10px 14px;
+    padding-bottom:calc(16px + env(safe-area-inset-bottom));
+    box-shadow:0 -12px 34px rgba(0,0,0,.55);animation:sheetUp .28s cubic-bezier(.2,.8,.2,1)}
+  @keyframes sheetUp{from{transform:translateY(100%)}to{transform:none}}
+  .sheet-h{text-align:center;font-size:12px;color:var(--muted);font-weight:700;
+    text-transform:uppercase;letter-spacing:.7px;padding:10px 0 12px}
+  .sheet-opt{display:flex;align-items:center;gap:13px;padding:15px 14px;border-radius:14px;
+    background:var(--card2);border:1px solid var(--line);margin-bottom:9px;
+    font-size:15px;font-weight:600;color:var(--txt);cursor:pointer;transition:.12s}
+  .sheet-opt:active{transform:scale(.98);border-color:var(--gold-2)}
+  .sheet-opt .ico{font-size:20px;width:24px;text-align:center}
+  .sheet-cancel{text-align:center;padding:15px;margin-top:4px;color:var(--muted);
+    font-weight:600;cursor:pointer}
+
   .skel{height:70px;border-radius:16px;background:
     linear-gradient(90deg,var(--card) 25%,var(--card2) 50%,var(--card) 75%);
     background-size:200% 100%;animation:sh 1.2s infinite;margin-bottom:11px}
@@ -460,53 +479,65 @@
   }
 
   /* ---------- utils ---------- */
-  // geo: URI -> telefon "qaysi ilovada ochish" so'raydi + pinni nom bilan belgilaydi
-  function geoUrl(e) {
-    var label = e.name || e.venue_name || 'Tadbir';
-    if (e.lat && e.lon) {
-      return 'geo:' + e.lat + ',' + e.lon +
-             '?q=' + e.lat + ',' + e.lon + '(' + encodeURIComponent(label) + ')';
-    }
-    var addr = [e.venue_name, e.venue_address].filter(function (x) { return !!x; }).join(', ');
-    return 'geo:0,0?q=' + encodeURIComponent(addr);
-  }
   function hasLocation(e) {
     return !!((e.lat && e.lon) || e.venue_name || e.venue_address);
   }
-  // Brauzer uchun zaxira havola: aniq koordinataga pin qo'yadi (yonidagi joyni emas)
-  function webMapUrl(e) {
+  // Har bir xarita ilovasi uchun to'g'ri havola (pin + tadbir nomi bilan)
+  function mapLinks(e) {
+    var label = e.name || e.venue_name || 'Tadbir';
+    var enc = encodeURIComponent(label);
     if (e.lat && e.lon) {
-      return 'https://www.google.com/maps/search/?api=1&query=' + e.lat + ',' + e.lon;
+      return [
+        { ico: '🍎', name: 'Apple Xarita',
+          url: 'https://maps.apple.com/?ll=' + e.lat + ',' + e.lon + '&q=' + enc },
+        { ico: '🟡', name: 'Yandex Xarita',
+          url: 'https://yandex.com/maps/?pt=' + e.lon + ',' + e.lat + '&z=17&l=map' },
+        { ico: '📍', name: 'Google Xarita',
+          url: 'https://maps.google.com/?q=' + e.lat + ',' + e.lon + '(' + enc + ')' }
+      ];
     }
     var addr = [e.venue_name, e.venue_address].filter(function (x) { return !!x; }).join(', ');
-    return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(addr);
+    var a = encodeURIComponent(addr);
+    return [
+      { ico: '🍎', name: 'Apple Xarita', url: 'https://maps.apple.com/?q=' + a },
+      { ico: '🟡', name: 'Yandex Xarita', url: 'https://yandex.com/maps/?text=' + a },
+      { ico: '📍', name: 'Google Xarita', url: 'https://maps.google.com/?q=' + a }
+    ];
   }
-  // Xaritani xavfsiz ochish: sahifani ALMASHTIRMAYMIZ (shu sabab avval webview qotib qolardi).
-  // 1) geo: -> yashirin iframe orqali -> telefon "qaysi ilovada ochish" so'raydi.
-  // 2) Ochilmasa (sahifa hali ko'rinib tursa) -> brauzerda Google xarita.
+  // Xaritani ochish: foydalanuvchiga qaysi ilovada ochishni tanlatadi (bottom sheet).
+  // Sahifani ALMASHTIRMAYDI -> webview buzilmaydi; iPhone/Android'da bir xil ishlaydi.
   function openMap(e) {
     haptic('medium');
-    var moved = false;
-    function onLeave() { moved = true; }
-    window.addEventListener('blur', onLeave);
-    document.addEventListener('visibilitychange', onLeave);
+    var links = mapLinks(e);
 
-    try {
-      var ifr = document.createElement('iframe');
-      ifr.style.cssText = 'display:none;width:0;height:0;border:0';
-      ifr.src = geoUrl(e);
-      document.body.appendChild(ifr);
-      setTimeout(function () { try { document.body.removeChild(ifr); } catch (_) {} }, 2000);
-    } catch (err) {}
+    var bg = document.createElement('div');
+    bg.className = 'sheet-bg on';
+    var html = '<div class="sheet"><div class="sheet-h">Xaritada ochish</div>';
+    for (var i = 0; i < links.length; i++) {
+      html += '<div class="sheet-opt" data-url="' + esc(links[i].url) + '">' +
+                '<span class="ico">' + links[i].ico + '</span>' + esc(links[i].name) +
+              '</div>';
+    }
+    html += '<div class="sheet-cancel" id="sheetCancel">Bekor qilish</div></div>';
+    bg.innerHTML = html;
+    document.body.appendChild(bg);
 
-    setTimeout(function () {
-      window.removeEventListener('blur', onLeave);
-      document.removeEventListener('visibilitychange', onLeave);
-      if (!moved && !document.hidden) {
-        var web = webMapUrl(e);
-        if (tg && tg.openLink) tg.openLink(web); else window.open(web, '_blank');
-      }
-    }, 2500);
+    function close() { try { document.body.removeChild(bg); } catch (_) {} }
+
+    bg.addEventListener('click', function (ev) { if (ev.target === bg) close(); });
+    document.getElementById('sheetCancel').addEventListener('click', function () {
+      haptic(); close();
+    });
+
+    var opts = bg.querySelectorAll('.sheet-opt');
+    for (var j = 0; j < opts.length; j++) {
+      opts[j].addEventListener('click', function () {
+        var url = this.getAttribute('data-url');
+        haptic('light');
+        close();
+        if (tg && tg.openLink) tg.openLink(url); else window.open(url, '_blank');
+      });
+    }
   }
   function pad(n) { return (n < 10 ? '0' : '') + n; }
   function startOfDay(d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
