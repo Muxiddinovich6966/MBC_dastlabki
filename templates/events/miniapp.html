@@ -5,6 +5,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>M Faktor — Tadbirlar</title>
+<link rel="icon" href="data:,">
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
   :root{
@@ -243,6 +244,20 @@
     try { console.log('PROMISE REJECT:', ev.reason); } catch (e) {}
   });
   if (/[?&]debug/.test(location.search)) loadDebugConsole();
+
+  /* ---------- Qayta ochilganda yangilash ----------
+     Telegram webview'ni fonda saqlaydi; 5-10 daqiqadan keyin qaytganda eski
+     (qotgan) holatini ko'rsatishi mumkin. Keshdan tiklansa -> sahifani yangilaymiz,
+     Telegram "activated" bersa -> ma'lumotni qayta yuklaymiz. */
+  window.addEventListener('pageshow', function (ev) {
+    if (ev.persisted) { try { location.reload(); } catch (e) {} }
+  });
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden && window.__loaded) { try { load(); } catch (e) {} }
+  });
+  if (tg && tg.onEvent) {
+    try { tg.onEvent('activated', function () { try { load(); } catch (e) {} }); } catch (e) {}
+  }
   (function () {
     var b = document.querySelector('.brand');
     if (!b) return;
@@ -325,6 +340,7 @@
 
         renderUpcoming();
         renderCal();
+        window.__loaded = true;
       })
       .catch(function (err) {
         if (timer) clearTimeout(timer);
